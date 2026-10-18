@@ -31,7 +31,19 @@ export interface Snapshot {
   round: number
   timeLeft: number
   overtime: boolean
-  goats: { name: string; team: string; hp: number; x: number; y: number; ignite: number; ai: string; plan: string; dead: boolean }[]
+  goats: {
+    name: string
+    team: string
+    hp: number
+    x: number
+    y: number
+    ignite: number
+    ai: string
+    plan: string
+    dead: boolean
+    charging: boolean
+    chargePower: number
+  }[]
 }
 
 export class Game {
@@ -237,6 +249,8 @@ export class Game {
         ai: g.ai,
         plan: g.plan,
         dead: g.dead,
+        charging: g.charging,
+        chargePower: Math.round(g.chargePower * 100) / 100,
       })),
     }
   }

@@ -49,7 +49,7 @@ export function difficulty(round: number): Difficulty {
     aggro: 780,
     aimTrack: clamp(2.6 + (r - 1) * 0.6, 2.6, 6.8),
     lead: clamp(0.24 + (r - 1) * 0.035, 0.24, 0.48),
-    bounce: clamp(0.22 + (r - 1) * 0.09, 0.22, 0.8),
+    bounce: clamp(0.36 + (r - 1) * 0.07, 0.36, 0.82),
     dodge: clamp(0.5 + (r - 1) * 0.06, 0.5, 0.92),
   }
 }
@@ -445,7 +445,7 @@ function pickAttack(world: World, goat: Goat, target: Goat): 'attack' | 'bounce'
   const direct = Math.atan2(pred.y - goat.y, pred.x - goat.x)
   const bank = Math.atan2(mirrored.y - goat.y, mirrored.x - goat.x)
   const delta = Math.abs(Math.atan2(Math.sin(bank - direct), Math.cos(bank - direct)))
-  if (delta < 0.22) return 'attack'
+  if (delta < 0.12) return 'attack'
   return 'bounce'
 }
 
