@@ -1,17 +1,17 @@
 # Billy Bash
 
-A top-down arena brawler. You are a goat. Grab yourself, pull back, and ram the other goats before the fence catches fire.
+A top-down arena brawler. You are a goat. Pull from anywhere on the field and ram the other goats before the fence catches fire.
 
 ## How to play
 
 1. **Enter the ring** from the main menu. Choose a **2:00** or **3:00** round (3:00 is the default).
-2. **Press and hold your goat** — the one with the red collar and the dashed ring. Mouse and touch both work.
-3. **Drag backward.** A longer drag (up to a max) winds up a harder ram: more speed, more damage, more knockback. An arrow shows where you will launch.
-4. **Release** to fly the opposite way. Hitting another goat deals damage based on impact speed and sends both of you bouncing. The white fence reflects you with a thud.
-5. **Rivals telegraph** their rams. A red arrow and a **!** mean they are winding up — ram them first or launch out of the line.
+2. **Press and drag anywhere** on the field. You are the goat with the red collar and the dashed ring. Mouse and touch both work. Menu and HUD buttons still click normally.
+3. **The pull sets the ram.** Launch direction is opposite your drag, and a longer drag (up to a max) means more speed, damage, and knockback. The aim arrow is drawn from your goat, not from your finger.
+4. **Release** to fly. Hitting another goat deals damage based on impact speed and sends both of you bouncing. The white fence reflects you with a thud.
+5. **Rivals telegraph** their rams. A red arrow and a **!** mean they are winding up — ram them first or launch out of the line. They aim ahead of you, sometimes bank off the fence, and sidestep when you aim at them.
 6. **Last flock standing wins.** If the clock hits zero, whoever has more HP left takes the round (your HP versus the rivals' combined HP).
 7. **Overtime** starts at **0:45**. The fence turns to fire. Touching it or bouncing off it burns: a chunk of damage on contact, then damage over time.
-8. Win to go to the **next round**. Later rounds add a second rival (round 3) and a third (round 5), and they wind up faster.
+8. Win to go to the **next round**. Later rounds add a second rival (round 3) and a third (round 5). They wind up faster, lead their shots, and dodge more often.
 
 Pause with the **Pause** button, **Esc**, or **P**. Leaving the tab also pauses.
 
@@ -23,7 +23,7 @@ Pause with the **Pause** button, **Esc**, or **P**. Leaving the tab also pauses.
 
 | Action | Mouse | Touch |
 | --- | --- | --- |
-| Wind up a ram | Press on your goat and drag | Same, with a finger |
+| Wind up a ram | Press anywhere and drag | Same, with a finger |
 | Launch | Release | Lift |
 | Pause | Pause button, Esc, or P | Pause button |
 

@@ -37,6 +37,10 @@ export interface Goat {
   ramArmed: boolean
   ramTime: number
   fx: number
+  /** What the current telegraph is committing to. */
+  plan: 'attack' | 'bounce' | 'dodge'
+  /** Already reacted to the player's current aim, so the roll happens once. */
+  sawAim: boolean
 }
 
 export interface Particle {
@@ -92,6 +96,12 @@ export interface Difficulty {
   hp: number
   aggro: number
   aimTrack: number
+  /** Seconds of target motion to aim ahead of. */
+  lead: number
+  /** Chance to bank a shot off the fence instead of aiming straight. */
+  bounce: number
+  /** Chance to sidestep when the player is aiming at this goat. */
+  dodge: number
 }
 
 export interface SimHooks {

@@ -1,5 +1,5 @@
 import { AudioBus } from './audio'
-import { HUD_BAND, MAX_DRAG_PX, MIN_POWER, TOUCH_SLOP_PX, WORLD } from './constants'
+import { HUD_BAND, MAX_DRAG_PX, MIN_POWER, WORLD } from './constants'
 import type { Camera } from './draw'
 import { drawOverlay, drawWorld, paintPortrait } from './draw'
 import {
@@ -31,7 +31,19 @@ export interface Snapshot {
   round: number
   timeLeft: number
   overtime: boolean
-  goats: { name: string; team: string; hp: number; x: number; y: number; ignite: number; ai: string; dead: boolean }[]
+  goats: {
+    name: string
+    team: string
+    hp: number
+    x: number
+    y: number
+    ignite: number
+    ai: string
+    plan: string
+    dead: boolean
+    charging: boolean
+    chargePower: number
+  }[]
 }
 
 export class Game {
@@ -55,7 +67,7 @@ export class Game {
   private dragId: number | null = null
   private dragX = 0
   private dragY = 0
-  private pull: { x: number; y: number } | null = null
+  private pull: { origin: { x: number; y: number }; current: { x: number; y: number } } | null = null
   private modeKey = ''
   private hudKey = ''
   private debug: boolean
@@ -235,7 +247,10 @@ export class Game {
         y: Math.round(g.y),
         ignite: Math.round(g.ignite * 10) / 10,
         ai: g.ai,
+        plan: g.plan,
         dead: g.dead,
+        charging: g.charging,
+        chargePower: Math.round(g.chargePower * 100) / 100,
       })),
     }
   }
@@ -366,10 +381,7 @@ export class Game {
     if (this.world.mode !== 'playing') return
     const player = getPlayer(this.world)
     if (!player || player.dead) return
-    const worldPos = this.toWorld(event.clientX, event.clientY)
-    const screenDist = Math.hypot((worldPos.x - player.x) * this.cam.s, (worldPos.y - player.y) * this.cam.s)
-    const limit = Math.max(TOUCH_SLOP_PX, player.radius * this.cam.s + 18)
-    if (screenDist > limit) return
+    const origin = this.toWorld(event.clientX, event.clientY)
     this.dragId = event.pointerId
     this.dragX = event.clientX
     this.dragY = event.clientY
@@ -378,7 +390,7 @@ export class Game {
     player.chargeAngle = player.facing
     player.vx = 0
     player.vy = 0
-    this.pull = worldPos
+    this.pull = { origin, current: origin }
     try {
       this.canvas.setPointerCapture(event.pointerId)
     } catch {
@@ -399,7 +411,7 @@ export class Game {
       player.chargeAngle = Math.atan2(-dy, -dx)
       player.facing = player.chargeAngle
     }
-    this.pull = this.toWorld(event.clientX, event.clientY)
+    if (this.pull) this.pull = { origin: this.pull.origin, current: this.toWorld(event.clientX, event.clientY) }
   }
 
   private onUp(event: PointerEvent): void {

@@ -14,7 +14,7 @@ export function drawWorld(
   ctx: CanvasRenderingContext2D,
   world: World,
   time: number,
-  pull: { x: number; y: number } | null,
+  pull: { origin: { x: number; y: number }; current: { x: number; y: number } } | null,
 ): void {
   const field = getField()
   ctx.drawImage(field, 0, 0)
@@ -30,12 +30,12 @@ export function drawWorld(
   for (const goat of world.goats) {
     if (goat.dead) continue
     if (goat.team === 'player' && goat.charging) {
-      drawAim(ctx, goat.x, goat.y, goat.chargeAngle, goat.chargePower, mixHex('#b6f27a', '#ff4d3a', goat.chargePower), true)
-      if (pull) drawPullTether(ctx, goat, pull)
+      drawAim(ctx, goat.x, goat.y, goat.chargeAngle, goat.chargePower, mixHex('#b6f27a', '#ff4d3a', goat.chargePower))
+      if (pull) drawPullTether(ctx, pull)
     } else if (goat.team === 'enemy' && goat.ai === 'windup') {
       const p = 1 - goat.aiTimer / Math.max(0.001, goat.aiWindup)
       const alpha = 0.4 + Math.min(1, p) * 0.6
-      drawAim(ctx, goat.x, goat.y, goat.aimAngle, Math.max(0.18, p), `rgba(255, 78, 48, ${alpha})`, false)
+      drawAim(ctx, goat.x, goat.y, goat.aimAngle, Math.max(0.18, p), `rgba(255, 78, 48, ${alpha})`)
     }
   }
 }
@@ -123,7 +123,7 @@ export function drawOverlay(
     ctx.font = '700 18px Fredoka, "Trebuchet MS", sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'bottom'
-    const text = 'Hold your goat and pull back'
+    const text = 'Pull anywhere to ram'
     const y = viewH - 18
     ctx.lineWidth = 5
     ctx.strokeStyle = 'rgba(20, 40, 16, 0.8)'
@@ -155,9 +155,10 @@ export function paintPortrait(
     ctx.lineTo(x + 2, y - 8)
     ctx.stroke()
   }
+  const fit = Math.min(w / 140, h / 118)
   ctx.save()
-  ctx.translate(w / 2, h / 2 + 10 + Math.sin(time * 2) * 2)
-  ctx.scale(1.45, 1.45)
+  ctx.translate(w / 2, h / 2 + 4 + Math.sin(time * 2) * 2)
+  ctx.scale(fit, fit)
   drawGoat(ctx, { ...goat, x: 0, y: 0 }, time, { x: 0, y: 0 })
   ctx.restore()
 }
@@ -175,6 +176,8 @@ function drawPlayerRing(ctx: CanvasRenderingContext2D, goat: Goat, time: number)
   ctx.restore()
 }
 
+const OUTLINE = '#2a2118'
+
 function drawGoat(
   ctx: CanvasRenderingContext2D,
   goat: Goat,
@@ -182,159 +185,287 @@ function drawGoat(
   offset: { x: number; y: number },
 ): void {
   const r = goat.radius
-  const color = goat.color
-  const dark = shade(color, -48)
-  const belly = shade(color, 36)
+  const rival = goat.team === 'enemy'
+  const coat = rival ? shade(goat.color, -24) : goat.color
+  const belly = shade(coat, 38)
+  const mark = goat.id % 3
   ctx.save()
   ctx.translate(goat.x + offset.x, goat.y + offset.y)
   ctx.save()
-  ctx.scale(1, 0.42)
-  ctx.fillStyle = 'rgba(16, 40, 18, 0.28)'
+  ctx.scale(1, 0.38)
+  ctx.fillStyle = 'rgba(16, 40, 18, 0.3)'
   ctx.beginPath()
-  ctx.ellipse(0, r * 1.55, r * 0.95, r * 0.95, 0, 0, Math.PI * 2)
+  ctx.ellipse(2, r * 1.7, r * 1.05, r * 0.95, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 
   if (goat.dead) ctx.globalAlpha = 0.72
   ctx.rotate(goat.facing + (goat.dead ? Math.PI / 2 : 0))
   const squash = goat.dead ? 0 : goat.squash
-  ctx.scale(1 + squash * 0.22, 1 - squash * 0.16)
+  ctx.scale(1 + squash * 0.18, 1 - squash * 0.14)
 
   const phase = goat.legPhase
-  const legs: [number, number, number][] = [
-    [r * 0.28, -r * 0.42, 0],
-    [r * 0.28, r * 0.42, Math.PI],
-    [-r * 0.42, -r * 0.4, Math.PI],
-    [-r * 0.42, r * 0.4, 0],
-  ]
-  for (const [lx, ly, ph] of legs) {
-    const bob = Math.sin(phase + ph) * r * 0.1
-    ctx.fillStyle = dark
-    ctx.beginPath()
-    ctx.ellipse(lx, ly, r * 0.16, r * 0.26, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = '#2c211c'
-    ctx.beginPath()
-    ctx.ellipse(lx + r * 0.08, ly + bob * 0.15, r * 0.09, r * 0.09, 0, 0, Math.PI * 2)
-    ctx.fill()
-  }
+  drawLeg(ctx, r, 0.22, -0.46, Math.sin(phase) * r * 0.2, coat)
+  drawLeg(ctx, r, 0.22, 0.46, Math.sin(phase + Math.PI) * r * 0.2, coat)
+  drawLeg(ctx, r, -0.48, -0.4, Math.sin(phase + Math.PI) * r * 0.2, coat)
+  drawLeg(ctx, r, -0.48, 0.4, Math.sin(phase) * r * 0.2, coat)
 
-  ctx.fillStyle = dark
+  const wag = Math.sin(time * 7.5 + goat.blinkOffset) * r * 0.16
+  ctx.fillStyle = OUTLINE
   ctx.beginPath()
-  ctx.ellipse(-r * 0.02, 0, r * 1.0, r * 0.7, 0, 0, Math.PI * 2)
+  ctx.arc(-r * 0.98, wag, r * 0.2, 0, Math.PI * 2)
   ctx.fill()
-  ctx.fillStyle = color
+  ctx.fillStyle = coat
   ctx.beginPath()
-  ctx.ellipse(-r * 0.02, 0, r * 0.9, r * 0.6, 0, 0, Math.PI * 2)
+  ctx.arc(-r * 0.98, wag, r * 0.14, 0, Math.PI * 2)
+  ctx.fill()
+
+  traceWool(ctx, r)
+  ctx.fillStyle = OUTLINE
+  ctx.fill()
+  traceWool(ctx, r, 0.9, 0.02)
+  ctx.fillStyle = coat
   ctx.fill()
   ctx.fillStyle = belly
   ctx.beginPath()
-  ctx.ellipse(r * 0.08, 0, r * 0.42, r * 0.3, 0, 0, Math.PI * 2)
+  ctx.ellipse(r * 0.02, r * 0.08, r * 0.32, r * 0.2, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.fillStyle = 'rgba(255,255,255,0.28)'
   ctx.beginPath()
-  ctx.ellipse(-r * 0.22, -r * 0.22, r * 0.26, r * 0.14, -0.5, 0, Math.PI * 2)
+  ctx.ellipse(-r * 0.16, -r * 0.16, r * 0.28, r * 0.16, -0.45, 0, Math.PI * 2)
   ctx.fill()
 
-  ctx.fillStyle = color
-  ctx.strokeStyle = dark
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.arc(-r * 0.98, 0, r * 0.2, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.stroke()
-
-  ctx.fillStyle = shade(color, -18)
-  ctx.beginPath()
-  ctx.ellipse(r * 0.58, -r * 0.46, r * 0.24, r * 0.14, -0.7, 0, Math.PI * 2)
-  ctx.ellipse(r * 0.58, r * 0.46, r * 0.24, r * 0.14, 0.7, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = '#f3b7c4'
-  ctx.beginPath()
-  ctx.ellipse(r * 0.62, -r * 0.46, r * 0.12, r * 0.07, -0.7, 0, Math.PI * 2)
-  ctx.ellipse(r * 0.62, r * 0.46, r * 0.12, r * 0.07, 0.7, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.strokeStyle = '#f0e0bc'
-  ctx.lineWidth = 4
-  ctx.lineCap = 'round'
-  ctx.beginPath()
-  ctx.moveTo(r * 0.72, -r * 0.22)
-  ctx.quadraticCurveTo(r * 0.48, -r * 0.95, r * 0.98, -r * 1.02)
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.moveTo(r * 0.72, r * 0.22)
-  ctx.quadraticCurveTo(r * 0.48, r * 0.95, r * 0.98, r * 1.02)
-  ctx.stroke()
-
-  ctx.fillStyle = dark
-  ctx.beginPath()
-  ctx.arc(r * 0.78, 0, r * 0.5, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = color
-  ctx.beginPath()
-  ctx.arc(r * 0.78, 0, r * 0.42, 0, Math.PI * 2)
-  ctx.fill()
-
-  const blink = !goat.dead && Math.sin(time * 1.7 + goat.blinkOffset) > 0.97
-  ctx.fillStyle = '#fffdf8'
-  ctx.beginPath()
-  ctx.ellipse(r * 0.98, -r * 0.16, r * 0.13, blink ? r * 0.02 : r * 0.15, 0, 0, Math.PI * 2)
-  ctx.ellipse(r * 0.98, r * 0.16, r * 0.13, blink ? r * 0.02 : r * 0.15, 0, 0, Math.PI * 2)
-  ctx.fill()
-  if (!blink) {
-    ctx.fillStyle = '#24180f'
+  if (rival && mark === 0) {
+    ctx.fillStyle = shade(goat.color, -62)
     ctx.beginPath()
-    ctx.arc(r * 1.02, -r * 0.16, r * 0.06, 0, Math.PI * 2)
-    ctx.arc(r * 1.02, r * 0.16, r * 0.06, 0, Math.PI * 2)
+    ctx.ellipse(-r * 0.04, 0, r * 0.42, r * 0.09, -0.08, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = '#fff'
+  } else if (rival && mark === 1) {
+    ctx.fillStyle = shade(goat.color, -58)
+    for (const [x, y, rad] of [
+      [-0.22, -0.1, 0.13],
+      [0.08, 0.16, 0.1],
+      [-0.36, 0.12, 0.09],
+    ] as const) {
+      ctx.beginPath()
+      ctx.arc(x * r, y * r, rad * r, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+
+  const flop = Math.sin(time * 3.2 + goat.blinkOffset) * 0.12
+  drawEar(ctx, r, -1, coat, flop)
+  drawEar(ctx, r, 1, coat, flop)
+  drawHorn(ctx, r, -1)
+  drawHorn(ctx, r, 1)
+
+  ctx.fillStyle = OUTLINE
+  ctx.beginPath()
+  ctx.arc(r * 0.78, 0, r * 0.4, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = coat
+  ctx.beginPath()
+  ctx.arc(r * 0.78, 0, r * 0.33, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = 'rgba(255,255,255,0.22)'
+  ctx.beginPath()
+  ctx.ellipse(r * 0.66, -r * 0.12, r * 0.12, r * 0.08, -0.6, 0, Math.PI * 2)
+  ctx.fill()
+
+  if (rival && mark === 2) {
+    ctx.fillStyle = shade(goat.color, -50)
     ctx.beginPath()
-    ctx.arc(r * 1.04, -r * 0.18, r * 0.025, 0, Math.PI * 2)
-    ctx.arc(r * 1.04, r * 0.14, r * 0.025, 0, Math.PI * 2)
+    ctx.ellipse(r * 0.9, 0, r * 0.22, r * 0.18, 0, 0, Math.PI * 2)
     ctx.fill()
   }
 
-  ctx.fillStyle = shade(color, 18)
-  ctx.beginPath()
-  ctx.ellipse(r * 1.18, 0, r * 0.16, r * 0.12, 0, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = '#6a3040'
-  ctx.beginPath()
-  ctx.arc(r * 1.22, -r * 0.035, r * 0.028, 0, Math.PI * 2)
-  ctx.arc(r * 1.22, r * 0.035, r * 0.028, 0, Math.PI * 2)
-  ctx.fill()
+  drawBeard(ctx, r)
+  drawFace(ctx, goat, time, r, coat)
 
   if (goat.team === 'player') {
     ctx.strokeStyle = '#e24b4b'
-    ctx.lineWidth = 3.5
+    ctx.lineWidth = 4
+    ctx.lineCap = 'round'
     ctx.beginPath()
-    ctx.arc(r * 0.55, 0, r * 0.2, -0.7, 0.7)
+    ctx.arc(r * 0.46, 0, r * 0.16, -1.15, 1.15)
     ctx.stroke()
     ctx.fillStyle = '#ffd15c'
     ctx.beginPath()
-    ctx.arc(r * 0.7, r * 0.12, r * 0.07, 0, Math.PI * 2)
+    ctx.arc(r * 0.52, r * 0.14, r * 0.075, 0, Math.PI * 2)
     ctx.fill()
-    ctx.strokeStyle = '#2a2118'
-    ctx.lineWidth = 1.5
+    ctx.strokeStyle = OUTLINE
+    ctx.lineWidth = 1.6
     ctx.stroke()
   }
 
   if (goat.flash > 0) {
-    ctx.fillStyle = `rgba(255,255,255,${Math.min(0.7, goat.flash * 2.4)})`
+    ctx.fillStyle = `rgba(255,255,255,${Math.min(0.65, goat.flash * 2.2)})`
+    traceWool(ctx, r)
+    ctx.fill()
     ctx.beginPath()
-    ctx.ellipse(0.1 * r, 0, r * 1.05, r * 0.78, 0, 0, Math.PI * 2)
+    ctx.arc(r * 0.78, 0, r * 0.36, 0, Math.PI * 2)
     ctx.fill()
   }
   if (goat.ignite > 0) {
-    const flicker = 0.28 + Math.sin(time * 22 + goat.blinkOffset) * 0.08
+    const flicker = 0.26 + Math.sin(time * 22 + goat.blinkOffset) * 0.08
     ctx.fillStyle = `rgba(255, 120, 30, ${flicker})`
-    ctx.beginPath()
-    ctx.ellipse(0, 0, r * 1.02, r * 0.74, 0, 0, Math.PI * 2)
+    traceWool(ctx, r * 1.02)
     ctx.fill()
   }
 
   ctx.restore()
+}
+
+function drawLeg(
+  ctx: CanvasRenderingContext2D,
+  r: number,
+  x: number,
+  y: number,
+  swing: number,
+  coat: string,
+): void {
+  const side = y < 0 ? -1 : 1
+  ctx.save()
+  ctx.translate(x * r + swing, y * r)
+  ctx.fillStyle = shade(coat, -36)
+  ctx.strokeStyle = OUTLINE
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.ellipse(0, side * r * 0.02, r * 0.11, r * 0.2, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = '#2c211c'
+  ctx.beginPath()
+  ctx.ellipse(r * 0.08, side * r * 0.16, r * 0.09, r * 0.065, 0.2, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#4a382e'
+  ctx.beginPath()
+  ctx.ellipse(r * 0.04, side * r * 0.14, r * 0.03, r * 0.02, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+function traceWool(ctx: CanvasRenderingContext2D, r: number, scale = 1, shift = 0): void {
+  const puffs: [number, number, number][] = [
+    [-0.06, 0, 0.56],
+    [-0.46, 0, 0.4],
+    [0.26, 0, 0.34],
+    [-0.16, -0.3, 0.32],
+    [-0.16, 0.3, 0.32],
+    [0.06, -0.18, 0.26],
+    [0.06, 0.18, 0.26],
+  ]
+  ctx.beginPath()
+  for (const [x, y, rad] of puffs) {
+    const cx = (x * scale + shift) * r
+    const cy = y * scale * r
+    const cr = rad * scale * r
+    ctx.moveTo(cx + cr, cy)
+    ctx.arc(cx, cy, cr, 0, Math.PI * 2)
+  }
+}
+
+function drawEar(ctx: CanvasRenderingContext2D, r: number, side: number, coat: string, flop: number): void {
+  ctx.save()
+  ctx.translate(r * 0.58, side * r * 0.4)
+  ctx.rotate(side * (0.85 + flop))
+  ctx.fillStyle = OUTLINE
+  ctx.beginPath()
+  ctx.ellipse(0, 0, r * 0.24, r * 0.15, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = coat
+  ctx.beginPath()
+  ctx.ellipse(0, 0, r * 0.18, r * 0.1, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#f3b7c4'
+  ctx.beginPath()
+  ctx.ellipse(r * 0.02, 0, r * 0.09, r * 0.05, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawHorn(ctx: CanvasRenderingContext2D, r: number, side: number): void {
+  ctx.save()
+  ctx.strokeStyle = '#e7d3a4'
+  ctx.lineWidth = r * 0.13
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(r * 0.7, side * r * 0.16)
+  ctx.bezierCurveTo(r * 0.42, side * r * 0.55, r * 0.28, side * r * 0.95, r * 0.62, side * r * 1.12)
+  ctx.bezierCurveTo(r * 0.92, side * r * 1.26, r * 1.08, side * r * 0.92, r * 0.9, side * r * 0.78)
+  ctx.stroke()
+  ctx.strokeStyle = '#b08948'
+  ctx.lineWidth = r * 0.045
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawBeard(ctx: CanvasRenderingContext2D, r: number): void {
+  ctx.fillStyle = OUTLINE
+  const tufts: [number, number, number][] = [
+    [1.02, 0.2, 0.13],
+    [1.14, 0.08, 0.11],
+    [1.0, 0.32, 0.1],
+  ]
+  for (const [x, y, rad] of tufts) {
+    ctx.beginPath()
+    ctx.arc(x * r, y * r, rad * r + 1.6, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.fillStyle = '#f4ead8'
+  for (const [x, y, rad] of tufts) {
+    ctx.beginPath()
+    ctx.arc(x * r, y * r, rad * r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+function drawFace(
+  ctx: CanvasRenderingContext2D,
+  goat: Goat,
+  time: number,
+  r: number,
+  coat: string,
+): void {
+  const blink = !goat.dead && Math.sin(time * 1.7 + goat.blinkOffset) > 0.97
+  const ex = r * 0.96
+  ctx.fillStyle = '#fffdf8'
+  ctx.beginPath()
+  ctx.ellipse(ex, -r * 0.11, r * 0.1, blink ? r * 0.018 : r * 0.11, 0, 0, Math.PI * 2)
+  ctx.ellipse(ex, r * 0.11, r * 0.1, blink ? r * 0.018 : r * 0.11, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = OUTLINE
+  ctx.lineWidth = 1.4
+  ctx.stroke()
+  if (!blink) {
+    ctx.fillStyle = '#24180f'
+    ctx.beginPath()
+    ctx.arc(ex + r * 0.035, -r * 0.11, r * 0.05, 0, Math.PI * 2)
+    ctx.arc(ex + r * 0.035, r * 0.11, r * 0.05, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#fff'
+    ctx.beginPath()
+    ctx.arc(ex + r * 0.05, -r * 0.13, r * 0.02, 0, Math.PI * 2)
+    ctx.arc(ex + r * 0.05, r * 0.09, r * 0.02, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.fillStyle = 'rgba(232, 120, 140, 0.45)'
+  ctx.beginPath()
+  ctx.ellipse(r * 0.9, -r * 0.2, r * 0.06, r * 0.035, 0, 0, Math.PI * 2)
+  ctx.ellipse(r * 0.9, r * 0.2, r * 0.06, r * 0.035, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = shade(coat, 28)
+  ctx.strokeStyle = OUTLINE
+  ctx.lineWidth = 1.6
+  ctx.beginPath()
+  ctx.ellipse(r * 1.12, 0, r * 0.16, r * 0.11, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = '#6a3040'
+  ctx.beginPath()
+  ctx.arc(r * 1.16, -r * 0.035, r * 0.025, 0, Math.PI * 2)
+  ctx.arc(r * 1.16, r * 0.035, r * 0.025, 0, Math.PI * 2)
+  ctx.fill()
 }
 
 function drawHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number, goat: Goat): void {
@@ -383,7 +514,6 @@ function drawAim(
   angle: number,
   power: number,
   color: string,
-  dashedBack: boolean,
 ): void {
   const len = 28 + Math.max(0, Math.min(1, power)) * 168
   ctx.save()
@@ -404,31 +534,27 @@ function drawAim(
   ctx.lineTo(len - 4, 12)
   ctx.closePath()
   ctx.fill()
-  if (dashedBack) {
-    ctx.setLineDash([7, 7])
-    ctx.lineWidth = 3
-    ctx.globalAlpha = 0.8
-    ctx.beginPath()
-    ctx.moveTo(0, 0)
-    ctx.lineTo(-power * 96, 0)
-    ctx.stroke()
-  }
   ctx.restore()
 }
 
-function drawPullTether(ctx: CanvasRenderingContext2D, goat: Goat, pull: { x: number; y: number }): void {
+function drawPullTether(
+  ctx: CanvasRenderingContext2D,
+  pull: { origin: { x: number; y: number }; current: { x: number; y: number } },
+): void {
   ctx.save()
-  ctx.strokeStyle = 'rgba(255, 246, 232, 0.75)'
-  ctx.lineWidth = 2
-  ctx.setLineDash([3, 5])
+  ctx.strokeStyle = 'rgba(255, 246, 232, 0.85)'
+  ctx.fillStyle = '#fff6e8'
+  ctx.lineWidth = 3
+  ctx.lineCap = 'round'
+  ctx.setLineDash([5, 6])
   ctx.beginPath()
-  ctx.moveTo(goat.x, goat.y)
-  ctx.lineTo(pull.x, pull.y)
+  ctx.moveTo(pull.origin.x, pull.origin.y)
+  ctx.lineTo(pull.current.x, pull.current.y)
   ctx.stroke()
   ctx.setLineDash([])
-  ctx.fillStyle = '#fff6e8'
   ctx.beginPath()
-  ctx.arc(pull.x, pull.y, 5, 0, Math.PI * 2)
+  ctx.arc(pull.origin.x, pull.origin.y, 5, 0, Math.PI * 2)
+  ctx.arc(pull.current.x, pull.current.y, 6, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 }

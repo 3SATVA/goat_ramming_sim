@@ -6,6 +6,7 @@ import {
   DAMAGE_CAP,
   DAMAGE_SCALE,
   DAMAGE_THRESHOLD,
+  STAGGER_AT,
   DRAG,
   FENCE,
   FENCE_RESTITUTION,
@@ -37,15 +38,19 @@ export function emptyStats(): Stats {
 
 export function difficulty(round: number): Difficulty {
   const r = Math.max(1, round)
+  const multi = r >= 5 ? 1.28 : r >= 3 ? 1.12 : 1
   return {
     count: r >= 5 ? 3 : r >= 3 ? 2 : 1,
-    windup: clamp(1.12 - (r - 1) * 0.11, 0.4, 1.12),
-    recover: clamp(0.8 - (r - 1) * 0.05, 0.32, 0.8),
-    cooldown: clamp(2.15 - (r - 1) * 0.2, 0.65, 2.15),
-    speed: clamp(0.82 + (r - 1) * 0.055, 0.82, 1.18),
-    hp: Math.round(92 + (r - 1) * 10),
-    aggro: 720,
-    aimTrack: clamp(0.85 + (r - 1) * 0.55, 0.85, 4.6),
+    windup: clamp(0.74 - (r - 1) * 0.045, 0.4, 0.74),
+    recover: clamp(0.42 - (r - 1) * 0.02, 0.24, 0.42),
+    cooldown: clamp((2.7 - (r - 1) * 0.12) * multi, 1.15 * multi, 3.2),
+    speed: clamp(0.88 + (r - 1) * 0.035, 0.88, 1.12),
+    hp: Math.round(96 + (r - 1) * 6),
+    aggro: 780,
+    aimTrack: clamp(2.6 + (r - 1) * 0.6, 2.6, 6.8),
+    lead: clamp(0.24 + (r - 1) * 0.035, 0.24, 0.48),
+    bounce: clamp(0.36 + (r - 1) * 0.07, 0.36, 0.82),
+    dodge: clamp(0.5 + (r - 1) * 0.06, 0.5, 0.92),
   }
 }
 
@@ -291,23 +296,40 @@ function simulate(world: World, dt: number, hooks: SimHooks): void {
 
 function updateEnemy(world: World, goat: Goat, target: Goat, dt: number, hooks: SimHooks): void {
   const diff = world.diff
-  goat.cooldown -= dt
+  goat.cooldown = Math.max(0, goat.cooldown - dt)
   if (goat.stun > 0) {
     if (goat.ai === 'windup') goat.ai = 'idle'
     return
   }
   if (goat.ai === 'windup') {
-    if (goat.aiTimer > 0.16) {
-      const desired = aimPoint(goat, target, false)
-      goat.aimAngle = lerpAngle(goat.aimAngle, desired, 1 - Math.exp(-diff.aimTrack * dt))
+    const threatened = aimThreat(target, goat)
+    if (
+      goat.plan !== 'dodge' &&
+      !goat.sawAim &&
+      goat.aiTimer > Math.max(0.22, goat.aiWindup * 0.6) &&
+      threatened
+    ) {
+      goat.sawAim = true
+      if (Math.random() < diff.dodge) {
+        beginWindup(goat, 'dodge', dodgeAngle(goat, target), 0.5, Math.max(0.5, diff.windup * 0.82))
+      }
+    }
+    if (goat.aiTimer > 0.2) {
+      const desired = planAngle(world, goat, target)
+      const track = goat.plan === 'dodge' ? diff.aimTrack * 1.25 : diff.aimTrack
+      goat.aimAngle = lerpAngle(goat.aimAngle, desired, 1 - Math.exp(-track * dt))
     }
     goat.facing = goat.aimAngle
     goat.aiTimer -= dt
     if (goat.aiTimer <= 0) {
-      launchGoat(world, goat, goat.aimAngle, goat.aimPower, diff.speed, hooks)
+      const plan = goat.plan
+      const power = plan === 'dodge' ? Math.min(goat.aimPower, 0.56) : goat.aimPower
+      launchGoat(world, goat, goat.aimAngle, power, diff.speed, hooks)
       goat.ai = 'recover'
-      goat.aiTimer = diff.recover
-      goat.cooldown = diff.cooldown
+      goat.aiTimer = plan === 'dodge' ? diff.recover * 0.7 : diff.recover
+      goat.cooldown = diff.cooldown * (plan === 'dodge' ? 0.62 : 1)
+      goat.plan = 'attack'
+      goat.sawAim = false
     }
     return
   }
@@ -318,24 +340,141 @@ function updateEnemy(world: World, goat: Goat, target: Goat, dt: number, hooks: 
   }
 
   const desiredFace = Math.atan2(target.y - goat.y, target.x - goat.x)
-  goat.facing = lerpAngle(goat.facing, desiredFace, 1 - Math.exp(-3 * dt))
+  goat.facing = lerpAngle(goat.facing, desiredFace, 1 - Math.exp(-3.4 * dt))
   const dist = Math.hypot(target.x - goat.x, target.y - goat.y)
+  const threatened = aimThreat(target, goat)
+  if (threatened) {
+    if (!goat.sawAim) {
+      goat.sawAim = true
+      if (Math.random() < diff.dodge) {
+        beginWindup(goat, 'dodge', dodgeAngle(goat, target), 0.52, Math.max(0.5, diff.windup * 0.85))
+        return
+      }
+    }
+    if (goat.cooldown <= 0 && dist <= diff.aggro) {
+      beginAttack(world, goat, target, dist)
+      return
+    }
+  } else {
+    goat.sawAim = false
+  }
+
   if (goat.cooldown > 0 || dist > diff.aggro) return
-  const close = dist < goat.radius * 3.1
-  goat.ai = 'windup'
-  goat.aiWindup = close ? diff.windup * 0.72 : diff.windup
-  goat.aiTimer = goat.aiWindup
-  goat.aimAngle = aimPoint(goat, target, close)
-  goat.aimPower = close ? 0.48 : clamp(0.55 + dist / 900, 0.55, 1)
-  goat.facing = goat.aimAngle
+  if (dist < goat.radius * 2.7) {
+    beginWindup(goat, 'dodge', dodgeAngle(goat, target), 0.46, Math.max(0.46, diff.windup * 0.72))
+    return
+  }
+  beginAttack(world, goat, target, dist)
 }
 
-function aimPoint(goat: Goat, target: Goat, away: boolean): number {
-  const lead = away ? 0 : 0.2
-  const tx = clamp(target.x + target.vx * lead, FENCE + 70, WORLD - FENCE - 70)
-  const ty = clamp(target.y + target.vy * lead, FENCE + 70, WORLD - FENCE - 70)
-  if (away) return Math.atan2(goat.y - ty, goat.x - tx)
-  return Math.atan2(ty - goat.y, tx - goat.x)
+function beginAttack(world: World, goat: Goat, target: Goat, dist: number): void {
+  const diff = world.diff
+  const plan = pickAttack(world, goat, target)
+  goat.plan = plan
+  const angle = planAngle(world, goat, target)
+  const close = dist < goat.radius * 3.2
+  const power = close ? 0.5 : clamp(0.64 + dist / 1200, 0.64, 0.96)
+  const windup = close ? Math.max(0.36, diff.windup * 0.78) : diff.windup
+  beginWindup(goat, plan, angle, power, windup)
+}
+
+function beginWindup(goat: Goat, plan: Goat['plan'], angle: number, power: number, windup: number): void {
+  goat.plan = plan
+  goat.ai = 'windup'
+  goat.aiWindup = windup
+  goat.aiTimer = windup
+  goat.aimAngle = angle
+  goat.aimPower = power
+  goat.facing = angle
+}
+
+function aimThreat(player: Goat, goat: Goat): boolean {
+  if (!player.charging || player.chargePower < 0.22 || player.dead) return false
+  const dist = Math.hypot(goat.x - player.x, goat.y - player.y)
+  if (dist > 480 || dist < 1) return false
+  const toGoat = Math.atan2(goat.y - player.y, goat.x - player.x)
+  const delta = Math.atan2(Math.sin(toGoat - player.chargeAngle), Math.cos(toGoat - player.chargeAngle))
+  return Math.abs(delta) < 0.62
+}
+
+function planAngle(world: World, goat: Goat, target: Goat): number {
+  if (goat.plan === 'dodge') return dodgeAngle(goat, target)
+  const pred = predictPoint(world.diff, target)
+  if (goat.plan === 'bounce') {
+    const mirrored = bankMirror(pred)
+    if (mirrored) return Math.atan2(mirrored.y - goat.y, mirrored.x - goat.x)
+  }
+  return Math.atan2(pred.y - goat.y, pred.x - goat.x) + flank(world, goat)
+}
+
+function predictPoint(diff: Difficulty, target: Goat): { x: number; y: number } {
+  let vx = target.vx
+  let vy = target.vy
+  if (target.charging && target.chargePower > 0.15) {
+    const speed = (MIN_LAUNCH + target.chargePower * (MAX_LAUNCH - MIN_LAUNCH)) * 0.65
+    vx = Math.cos(target.chargeAngle) * speed
+    vy = Math.sin(target.chargeAngle) * speed
+  }
+  const inset = FENCE + 78
+  return {
+    x: clamp(target.x + vx * diff.lead, inset, WORLD - inset),
+    y: clamp(target.y + vy * diff.lead, inset, WORLD - inset),
+  }
+}
+
+function bankMirror(point: { x: number; y: number }): { x: number; y: number } | null {
+  const min = FENCE + GOAT_RADIUS
+  const max = WORLD - min
+  const walls = [
+    { gap: point.x - min, x: 2 * min - point.x, y: point.y },
+    { gap: max - point.x, x: 2 * max - point.x, y: point.y },
+    { gap: point.y - min, x: point.x, y: 2 * min - point.y },
+    { gap: max - point.y, x: point.x, y: 2 * max - point.y },
+  ]
+  walls.sort((a, b) => a.gap - b.gap)
+  const best = walls[0]
+  if (!best || best.gap > 170) return null
+  return { x: best.x, y: best.y }
+}
+
+function pickAttack(world: World, goat: Goat, target: Goat): 'attack' | 'bounce' {
+  const pred = predictPoint(world.diff, target)
+  const mirrored = bankMirror(pred)
+  if (!mirrored) return 'attack'
+  if (Math.random() > world.diff.bounce) return 'attack'
+  const direct = Math.atan2(pred.y - goat.y, pred.x - goat.x)
+  const bank = Math.atan2(mirrored.y - goat.y, mirrored.x - goat.x)
+  const delta = Math.abs(Math.atan2(Math.sin(bank - direct), Math.cos(bank - direct)))
+  if (delta < 0.12) return 'attack'
+  return 'bounce'
+}
+
+function dodgeAngle(goat: Goat, player: Goat): number {
+  const left = player.chargeAngle + Math.PI / 2
+  const right = player.chargeAngle - Math.PI / 2
+  const score = (angle: number) => {
+    const nx = goat.x + Math.cos(angle) * 150
+    const ny = goat.y + Math.sin(angle) * 150
+    return -Math.hypot(nx - WORLD / 2, ny - WORLD / 2) - railPenalty(nx, ny)
+  }
+  return score(left) >= score(right) ? left : right
+}
+
+function railPenalty(x: number, y: number): number {
+  const min = FENCE + 96
+  const max = WORLD - min
+  let penalty = 0
+  if (x < min) penalty += (min - x) * 4
+  if (x > max) penalty += (x - max) * 4
+  if (y < min) penalty += (min - y) * 4
+  if (y > max) penalty += (y - max) * 4
+  return penalty
+}
+
+function flank(world: World, goat: Goat): number {
+  const alive = world.goats.filter((g) => g.team === 'enemy' && !g.dead).length
+  if (alive < 2) return 0
+  return (goat.id % 2 === 0 ? 1 : -1) * 0.14
 }
 
 function collideFence(world: World, goat: Goat, hooks: SimHooks): void {
@@ -464,13 +603,14 @@ function solvePair(world: World, a: Goat, b: Goat, withHit: boolean, hooks: SimH
   const dmgB = raw * (intoA >= intoB ? 1 : 0.42)
   if (dmgA > 0.75) applyDamage(world, a, dmgA, b, hooks, false, 'ram')
   if (dmgB > 0.75) applyDamage(world, b, dmgB, a, hooks, false, 'ram')
-  if (dmgA > 8) stagger(a)
-  if (dmgB > 8) stagger(b)
+  if (dmgA > STAGGER_AT) stagger(a)
+  if (dmgB > STAGGER_AT) stagger(b)
 }
 
 function stagger(goat: Goat): void {
   goat.charging = false
-  goat.stun = 0.38
+  goat.stun = 0.34
+  goat.sawAim = false
   if (goat.team === 'enemy' && goat.ai === 'windup') goat.ai = 'idle'
 }
 
@@ -696,6 +836,8 @@ function makeGoat(partial: {
     ramArmed: false,
     ramTime: 0,
     fx: 0,
+    plan: 'attack',
+    sawAim: false,
   }
 }
 

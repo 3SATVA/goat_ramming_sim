@@ -56,7 +56,6 @@ input { font: inherit; }
 .hud-card,
 .hud-actions button,
 #btnDebugOt {
-  pointer-events: auto;
   background: #fff6e8;
   color: #2a2118;
   border: 3px solid #2a2118;
@@ -64,7 +63,13 @@ input { font: inherit; }
   box-shadow: 3px 3px 0 #1a140f;
 }
 
+.hud-actions button,
+#btnDebugOt {
+  pointer-events: auto;
+}
+
 .hud-card {
+  pointer-events: none;
   padding: 6px 10px 7px;
   min-width: 0;
 }
