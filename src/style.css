@@ -366,6 +366,9 @@ input[type="color"] {
   #roundLabel { font-size: 0.84rem; }
   .howto { font-size: 0.86rem; }
   .panel { padding: 14px; }
+  .hp-track { width: 84px; }
+  .hud-card.timer { min-width: 88px; font-size: 1.25rem; padding-inline: 8px; }
+  #hpLabel { display: none; }
 }
 
 @media (max-height: 700px) {

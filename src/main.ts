@@ -12,6 +12,8 @@ declare global {
     __billy?: {
       skipToOvertime: () => void
       snapshot: () => Snapshot
+      screenGoats: () => { name: string; team: string; hp: number; x: number; y: number; r: number }[]
+      debugRound: (round: number) => void
     }
   }
 }
@@ -69,6 +71,8 @@ if (game.debugEnabled) {
   window.__billy = {
     skipToOvertime: () => game.skipToOvertime(),
     snapshot: () => game.snapshot(),
+    screenGoats: () => game.screenGoats(),
+    debugRound: (round: number) => game.debugRound(round),
   }
 }
 
@@ -201,6 +205,9 @@ function fillEnd(end: EndResult): void {
 }
 
 function endCopy(end: EndResult): { title: string; body: string } {
+  if (end.result === 'win' && end.blow === 'fire') {
+    return { title: "Yard's yours", body: 'The fire finished what you started.' }
+  }
   if (end.result === 'win' && end.reason === 'ko') {
     return { title: "Yard's yours", body: 'You flattened the other goats.' }
   }
@@ -209,6 +216,9 @@ function endCopy(end: EndResult): { title: string; body: string } {
       title: 'Time!',
       body: `You finished with more HP (${end.playerHp} vs ${end.enemyHp}).`,
     }
+  }
+  if (end.result === 'lose' && end.blow === 'fire') {
+    return { title: 'Burned out', body: 'The fence caught you and would not let go.' }
   }
   if (end.result === 'lose' && end.reason === 'ko') {
     return { title: 'Knocked out', body: 'The other goat got the last ram.' }

@@ -188,6 +188,15 @@ export class Game {
     if (player) player.color = this.world.color
   }
 
+  debugRound(round: number): void {
+    if (!this.debug) return
+    this.cancelDrag()
+    this.world.round = Math.max(1, Math.round(round))
+    setupMatch(this.world)
+    this.world.countdown = 0.05
+    this.acc = 0
+  }
+
   skipToOvertime(): void {
     if (!this.debug) return
     if (this.world.mode === 'paused') this.resume()
@@ -198,6 +207,18 @@ export class Game {
     this.world.overtime = false
     this.world.otBanner = 0
     if (this.world.mode === 'countdown') this.world.countdown = 0.05
+  }
+
+  screenGoats(): { name: string; team: string; hp: number; x: number; y: number; r: number }[] {
+    const rect = this.canvas.getBoundingClientRect()
+    return this.world.goats.map((goat) => ({
+      name: goat.name,
+      team: goat.team,
+      hp: goat.hp,
+      x: rect.left + this.cam.x + goat.x * this.cam.s,
+      y: rect.top + this.cam.y + goat.y * this.cam.s,
+      r: Math.max(24, goat.radius * this.cam.s),
+    }))
   }
 
   snapshot(): Snapshot {

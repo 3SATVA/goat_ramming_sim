@@ -74,6 +74,7 @@ export function createWorld(color: string, minutes: 2 | 3, reduce: boolean): Wor
     reduce,
     hitstop: 0,
     crackleAcc: 0,
+    lastBlow: 'ram',
   }
   spawnMenuGoat(world)
   return world
@@ -119,6 +120,7 @@ export function setupMatch(world: World): void {
   world.shake = 0
   world.hitstop = 0
   world.crackleAcc = 0
+  world.lastBlow = 'ram'
   if (world.round > 1) world.hint = false
 
   const goats: Goat[] = []
@@ -236,7 +238,7 @@ function simulate(world: World, dt: number, hooks: SimHooks): void {
     if (goat.ignite > 0) {
       const burn = BURN_DPS * dt
       goat.ignite -= dt
-      applyDamage(world, goat, burn, null, hooks, true, 'ram')
+      applyDamage(world, goat, burn, null, hooks, true, 'fire')
     }
     if (goat.ignite > 0 && goat.fx <= 0) {
       goat.fx = 0.06
@@ -508,6 +510,7 @@ function applyDamage(
   if (goat.hp > 0) return
   goat.hp = 0
   goat.dead = true
+  world.lastBlow = kind
   goat.charging = false
   goat.vx *= 0.25
   goat.vy *= 0.25
@@ -545,6 +548,7 @@ function finish(world: World, result: EndResult['result'], reason: EndResult['re
     rams: world.stats.rams,
     bestHit: Math.round(world.stats.bestHit),
     launches: world.stats.launches,
+    blow: reason === 'time' ? 'time' : world.lastBlow,
   }
   world.result = end
   world.mode = 'end'

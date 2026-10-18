@@ -2,6 +2,7 @@ export type Team = 'player' | 'enemy'
 export type Mode = 'menu' | 'customize' | 'countdown' | 'playing' | 'paused' | 'end'
 export type EndKind = 'win' | 'lose' | 'draw'
 export type EndReason = 'ko' | 'time'
+export type Blow = 'ram' | 'fire' | 'time'
 
 export interface Goat {
   id: number
@@ -79,6 +80,7 @@ export interface EndResult {
   rams: number
   bestHit: number
   launches: number
+  blow: Blow
 }
 
 export interface Difficulty {
@@ -127,6 +129,7 @@ export interface World {
   reduce: boolean
   hitstop: number
   crackleAcc: number
+  lastBlow: 'ram' | 'fire'
 }
 
 export interface HudModel {
