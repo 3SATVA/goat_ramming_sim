@@ -53,7 +53,6 @@ input { font: inherit; }
 
 #hud[hidden] { display: none !important; }
 
-.hud-card,
 .hud-actions button,
 #btnDebugOt {
   pointer-events: auto;
@@ -65,6 +64,7 @@ input { font: inherit; }
 }
 
 .hud-card {
+  pointer-events: none;
   padding: 6px 10px 7px;
   min-width: 0;
 }
