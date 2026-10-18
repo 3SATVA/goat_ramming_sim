@@ -1,0 +1,24 @@
+export const WORLD = 800
+export const FENCE = 64
+export const GOAT_RADIUS = 42
+export const MAX_DRAG_PX = 168
+export const MIN_POWER = 0.14
+export const MIN_LAUNCH = 240
+export const MAX_LAUNCH = 760
+/** Exponential velocity damping (1/seconds). Full rams still cross the ring. */
+export const DRAG = 0.88
+export const GOAT_RESTITUTION = 0.86
+export const FENCE_RESTITUTION = 0.58
+export const FENCE_RESTITUTION_OT = 0.74
+export const DAMAGE_THRESHOLD = 150
+export const DAMAGE_SCALE = 0.06
+export const DAMAGE_CAP = 54
+export const PLAYER_HP = 100
+export const OT_AT = 45
+export const BURN_BURST = 11
+export const BURN_DPS = 6
+export const BURN_TIME = 1.45
+export const BURN_COOLDOWN = 0.48
+export const HIT_COOLDOWN = 0.26
+export const TOUCH_SLOP_PX = 64
+export const HUD_BAND = 76
