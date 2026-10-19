@@ -1,8 +1,21 @@
 export type Team = 'player' | 'enemy'
-export type Mode = 'menu' | 'customize' | 'countdown' | 'playing' | 'paused' | 'end'
+export type Mode = 'menu' | 'story' | 'upgrades' | 'customize' | 'countdown' | 'playing' | 'paused' | 'end'
 export type EndKind = 'win' | 'lose' | 'draw'
 export type EndReason = 'ko' | 'time'
-export type Blow = 'ram' | 'fire' | 'time'
+export type Blow = 'ram' | 'fire' | 'time' | 'hazard'
+export type Role = 'player' | 'grunt' | 'rival' | 'boss'
+export type ArenaEvent = 'clear' | 'rain' | 'wind' | 'mud' | 'fog' | 'snowstorm' | 'sandstorm'
+export type Theme = 'yard' | 'ice' | 'desert'
+export type BossKind = 'yard' | 'frost' | 'dune'
+export type HazardKind = 'rock' | 'spike' | 'dune'
+
+export interface Hazard {
+  kind: HazardKind
+  x: number
+  y: number
+  r: number
+  life: number
+}
 
 export interface Goat {
   id: number
@@ -41,6 +54,21 @@ export interface Goat {
   plan: 'attack' | 'bounce' | 'dodge'
   /** Already reacted to the player's current aim, so the roll happens once. */
   sawAim: boolean
+  role: Role
+  boss: BossKind | null
+  mass: number
+  damageMul: number
+  speedMul: number
+  fireMul: number
+  cooldownMax: number
+  /** Seconds of low-drag glide left after a heavy boss charge. */
+  glide: number
+  pendingGlide: number
+  pendingGust: number
+  /** Cooldown multiplier applied when this windup launches. 0 means the usual cooldown. */
+  pendingCd: number
+  hazardCd: number
+  bossStep: number
 }
 
 export interface Particle {
@@ -85,6 +113,11 @@ export interface EndResult {
   bestHit: number
   launches: number
   blow: Blow
+  coins: number
+  fight: 'story' | 'quick'
+  levelName: string
+  chapterName: string
+  event: ArenaEvent
 }
 
 export interface Difficulty {
@@ -112,6 +145,7 @@ export interface SimHooks {
   ko: () => void
   overtime: () => void
   crackle: () => void
+  weather: (kind: 'snow' | 'sand') => void
   finish: (result: EndResult) => void
 }
 
@@ -139,7 +173,30 @@ export interface World {
   reduce: boolean
   hitstop: number
   crackleAcc: number
-  lastBlow: 'ram' | 'fire'
+  lastBlow: 'ram' | 'fire' | 'hazard'
+  fight: 'story' | 'quick'
+  levelName: string
+  event: ArenaEvent
+  windAngle: number
+  eventBanner: number
+  coinReward: number
+  recharge: number
+  maxHp: number
+  mass: number
+  damage: number
+  speed: number
+  fire: number
+  theme: Theme
+  size: number
+  chapterName: string
+  hazards: Hazard[]
+  /** Seconds left on a boss-kicked gust. */
+  gust: number
+  gustBoost: number
+  gustAngle: number
+  stormAcc: number
+  stingAcc: number
+  lineup: { name: string; color: string; role: Exclude<Role, 'player'>; boss: BossKind | null }[]
 }
 
 export interface HudModel {
@@ -151,6 +208,8 @@ export interface HudModel {
   playerHp: number
   playerMax: number
   muted: boolean
+  title: string
+  event: ArenaEvent
 }
 
 export interface PullPoint {

@@ -1,17 +1,29 @@
 import { AudioBus } from './audio'
-import { HUD_BAND, MAX_DRAG_PX, MIN_POWER, WORLD } from './constants'
+import { HUD_BAND, MAX_DRAG_PX, MIN_POWER } from './constants'
 import type { Camera } from './draw'
 import { drawOverlay, drawWorld, paintPortrait } from './draw'
 import {
+  allLevels,
+  buildQuick,
+  buildStory,
+  isUnlocked,
+  loadoutFrom,
+  STATS,
+  upgradeCost,
+  type FightPlan,
+  type Progress,
+  type StatId,
+} from './progress'
+import {
+  applyPlan,
   createWorld,
-  difficulty,
   getPlayer,
   launchGoat,
   setupMatch,
   spawnMenuGoat,
   step,
 } from './sim'
-import type { EndResult, HudModel, Mode, SimHooks, World } from './types'
+import type { EndResult, HudModel, Mode, SimHooks, Theme, World } from './types'
 import { formatTime, isHexColor } from './util'
 
 const STEP = 1 / 60
@@ -24,6 +36,7 @@ export interface GamePorts {
   isMuted: () => boolean
   onMode: (mode: Mode, end: EndResult | null) => void
   onHud: (hud: HudModel) => void
+  onProgress: (progress: Progress) => void
 }
 
 export interface Snapshot {
@@ -31,10 +44,22 @@ export interface Snapshot {
   round: number
   timeLeft: number
   overtime: boolean
+  fight: 'story' | 'quick'
+  levelName: string
+  chapterName: string
+  event: string
+  theme: Theme
+  size: number
+  coins: number
+  cleared: number
+  hazards: number
   goats: {
     name: string
     team: string
+    role: string
+    boss: string | null
     hp: number
+    maxHp: number
     x: number
     y: number
     ignite: number
@@ -55,8 +80,11 @@ export class Game {
   private readonly isMuted: () => boolean
   private readonly onMode: GamePorts['onMode']
   private readonly onHud: GamePorts['onHud']
+  private readonly onProgress: GamePorts['onProgress']
   private readonly hooks: SimHooks
   private readonly world: World
+  private progress: Progress = { coins: 0, upgrades: { power: 0, hp: 0, weight: 0, speed: 0, recharge: 0, fire: 0 }, cleared: 0 }
+  private lastPlan: FightPlan | null = null
   private cam: Camera = { x: 0, y: 0, s: 1 }
   private dpr = 1
   private viewW = 1
@@ -71,6 +99,7 @@ export class Game {
   private modeKey = ''
   private hudKey = ''
   private debug: boolean
+  private preferredMinutes: 2 | 3 = 3
 
   constructor(ports: GamePorts) {
     const ctx = ports.canvas.getContext('2d')
@@ -83,6 +112,7 @@ export class Game {
     this.isMuted = ports.isMuted
     this.onMode = ports.onMode
     this.onHud = ports.onHud
+    this.onProgress = ports.onProgress
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const params = new URLSearchParams(location.search)
     this.debug = params.has('debug')
@@ -95,9 +125,14 @@ export class Game {
       ko: () => this.audio.ko(),
       overtime: () => this.audio.overtime(),
       crackle: () => this.audio.crackle(),
+      weather: (kind) => (kind === 'snow' ? this.audio.snow() : this.audio.sand()),
       finish: (result) => {
-        if (result.result === 'win') this.audio.win()
-        else if (result.result === 'lose') this.audio.lose()
+        if (result.result === 'win') {
+          this.progress.coins += result.coins
+          if (result.fight === 'story') this.progress.cleared = Math.max(this.progress.cleared, result.round)
+          this.onProgress(this.progress)
+          this.audio.win()
+        } else if (result.result === 'lose') this.audio.lose()
         else this.audio.draw()
       },
     }
@@ -132,16 +167,27 @@ export class Game {
     this.setMinutes(minutes)
   }
 
+  setProgress(progress: Progress): void {
+    this.progress = progress
+    this.applyLoadout()
+  }
+
+  currentProgress(): Progress {
+    return this.progress
+  }
+
   setColor(color: string): void {
     if (!isHexColor(color)) return
     this.world.color = color
     const player = getPlayer(this.world)
-    if (player && (this.world.mode === 'menu' || this.world.mode === 'customize')) player.color = color
+    const browsing = this.world.mode === 'menu' || this.world.mode === 'customize' || this.world.mode === 'story' || this.world.mode === 'upgrades'
+    if (player && browsing) player.color = color
   }
 
   setMinutes(minutes: 2 | 3): void {
+    this.preferredMinutes = minutes
     this.world.minutes = minutes
-    if (this.world.mode === 'menu' || this.world.mode === 'customize') {
+    if (this.world.mode === 'menu' || this.world.mode === 'customize' || this.world.mode === 'story' || this.world.mode === 'upgrades') {
       this.world.timeLeft = minutes * 60
     }
   }
@@ -156,11 +202,44 @@ export class Game {
     this.world.mode = 'menu'
   }
 
-  playFromMenu(): void {
-    this.cancelDrag()
-    this.world.round = 1
-    setupMatch(this.world)
-    this.acc = 0
+  openStory(): void {
+    if (this.world.mode !== 'menu') return
+    this.world.mode = 'story'
+  }
+
+  closePanels(): void {
+    if (this.world.mode !== 'story' && this.world.mode !== 'upgrades') return
+    this.world.mode = 'menu'
+  }
+
+  openUpgrades(): void {
+    if (this.world.mode !== 'menu') return
+    this.world.mode = 'upgrades'
+  }
+
+  buy(id: StatId): boolean {
+    if (this.world.mode !== 'upgrades') return false
+    const stat = STATS.find((item) => item.id === id)
+    const level = this.progress.upgrades[id]
+    if (!stat || level >= stat.max) return false
+    const cost = upgradeCost(id, level)
+    if (this.progress.coins < cost) return false
+    this.progress.coins -= cost
+    this.progress.upgrades[id] = level + 1
+    this.applyLoadout()
+    this.onProgress(this.progress)
+    return true
+  }
+
+  startStory(levelId: number): void {
+    if (this.world.mode !== 'story' && this.world.mode !== 'end') return
+    if (!isUnlocked(levelId, this.progress.cleared)) return
+    this.arm(buildStory(levelId, this.progress))
+  }
+
+  startQuick(): void {
+    if (this.world.mode !== 'menu' && this.world.mode !== 'end') return
+    this.arm(buildQuick(this.progress, this.world.color, this.preferredMinutes))
   }
 
   pause(): void {
@@ -176,16 +255,31 @@ export class Game {
   }
 
   retry(): void {
+    if (this.world.mode !== 'paused' && this.world.mode !== 'end') return
     this.cancelDrag()
-    setupMatch(this.world)
-    this.acc = 0
+    if (this.world.fight === 'story') this.arm(buildStory(this.world.round, this.progress))
+    else if (this.lastPlan) this.arm(this.lastPlan)
+    else this.arm(buildQuick(this.progress, this.world.color, this.preferredMinutes))
   }
 
   nextRound(): void {
+    if (this.world.result?.result !== 'win') return
     this.cancelDrag()
-    this.world.round += 1
-    setupMatch(this.world)
-    this.acc = 0
+    if (this.world.fight === 'quick') {
+      this.arm(buildQuick(this.progress, this.world.color, this.preferredMinutes))
+      return
+    }
+    const next = allLevels()[this.world.round]
+    if (!next) return
+    this.arm(buildStory(next.id, this.progress))
+  }
+
+  nextLabel(): string | null {
+    if (this.world.result?.result !== 'win') return null
+    if (this.world.fight === 'quick') return 'Another fight'
+    const next = allLevels()[this.world.round]
+    if (!next) return null
+    return `Next · ${next.id}. ${next.name}`
   }
 
   toMenu(): void {
@@ -195,6 +289,14 @@ export class Game {
     this.world.overtime = false
     this.world.round = 1
     this.world.shake = 0
+    this.world.theme = 'yard'
+    this.world.size = 800
+    this.world.event = 'clear'
+    this.world.hazards = []
+    this.world.chapterName = 'The Yard'
+    this.world.levelName = 'Yard'
+    this.world.minutes = this.preferredMinutes
+    this.world.timeLeft = this.preferredMinutes * 60
     spawnMenuGoat(this.world)
     const player = getPlayer(this.world)
     if (player) player.color = this.world.color
@@ -203,17 +305,27 @@ export class Game {
   debugRound(round: number): void {
     if (!this.debug) return
     this.cancelDrag()
-    this.world.round = Math.max(1, Math.round(round))
-    setupMatch(this.world)
+    const level = allLevels()[Math.max(0, Math.round(round) - 1)]
+    if (!level) return
+    this.arm(buildStory(level.id, this.progress))
     this.world.countdown = 0.05
     this.acc = 0
+  }
+
+  debugKnockout(): void {
+    if (!this.debug) return
+    for (const goat of this.world.goats) {
+      if (goat.team !== 'enemy') continue
+      goat.hp = 0
+      goat.dead = true
+    }
   }
 
   skipToOvertime(): void {
     if (!this.debug) return
     if (this.world.mode === 'paused') this.resume()
-    if (this.world.mode === 'menu' || this.world.mode === 'customize' || this.world.mode === 'end') {
-      this.playFromMenu()
+    if (this.world.mode === 'menu' || this.world.mode === 'customize' || this.world.mode === 'story' || this.world.mode === 'upgrades' || this.world.mode === 'end') {
+      this.startQuick()
     }
     this.world.timeLeft = 47
     this.world.overtime = false
@@ -239,10 +351,22 @@ export class Game {
       round: this.world.round,
       timeLeft: this.world.timeLeft,
       overtime: this.world.overtime,
+      fight: this.world.fight,
+      levelName: this.world.levelName,
+      chapterName: this.world.chapterName,
+      event: this.world.event,
+      theme: this.world.theme,
+      size: this.world.size,
+      coins: this.progress.coins,
+      cleared: this.progress.cleared,
+      hazards: this.world.hazards.length,
       goats: this.world.goats.map((g) => ({
         name: g.name,
         team: g.team,
+        role: g.role,
+        boss: g.boss,
         hp: Math.round(g.hp),
+        maxHp: g.maxHp,
         x: Math.round(g.x),
         y: Math.round(g.y),
         ignite: Math.round(g.ignite * 10) / 10,
@@ -257,6 +381,35 @@ export class Game {
 
   get debugEnabled(): boolean {
     return this.debug
+  }
+
+  private applyLoadout(): void {
+    const load = loadoutFrom(this.progress.upgrades)
+    this.world.maxHp = load.maxHp
+    this.world.mass = load.mass
+    this.world.damage = load.damage
+    this.world.speed = load.speed
+    this.world.recharge = load.recharge
+    this.world.fire = load.fire
+    const player = getPlayer(this.world)
+    const browsing = this.world.mode === 'menu' || this.world.mode === 'customize' || this.world.mode === 'story' || this.world.mode === 'upgrades'
+    if (player && browsing) {
+      player.maxHp = load.maxHp
+      player.hp = load.maxHp
+      player.mass = load.mass
+      player.damageMul = load.damage
+      player.speedMul = load.speed
+      player.fireMul = load.fire
+    }
+  }
+
+  private arm(plan: FightPlan): void {
+    this.cancelDrag()
+    this.lastPlan = plan
+    this.applyLoadout()
+    applyPlan(this.world, plan)
+    setupMatch(this.world)
+    this.acc = 0
   }
 
   private frame(now: number): void {
@@ -284,6 +437,7 @@ export class Game {
       }
       this.world.otBanner = Math.max(0, this.world.otBanner - dt)
       this.world.goBanner = Math.max(0, this.world.goBanner - dt)
+      if (this.world.mode === 'playing') this.world.eventBanner = Math.max(0, this.world.eventBanner - dt)
     }
     const player = getPlayer(this.world)
     if (this.dragId !== null && player && !player.charging) this.cancelDrag()
@@ -296,7 +450,7 @@ export class Game {
   private render(): void {
     const ctx = this.ctx
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
-    ctx.fillStyle = '#14341f'
+    ctx.fillStyle = this.world.theme === 'ice' ? '#163044' : this.world.theme === 'desert' ? '#5c4630' : '#14341f'
     ctx.fillRect(0, 0, this.viewW, this.viewH)
     let ox = 0
     let oy = 0
@@ -317,7 +471,8 @@ export class Game {
   private paintSides(): void {
     const player = getPlayer(this.world)
     if (!player) return
-    if (this.logo && (this.world.mode === 'menu' || this.world.mode === 'customize')) {
+    const showLogo = this.world.mode === 'menu' || this.world.mode === 'customize' || this.world.mode === 'story' || this.world.mode === 'upgrades'
+    if (this.logo && showLogo) {
       paintFitted(this.logo, (ctx, w, h) => paintPortrait(ctx, w, h, player, this.anim))
     }
     if (this.preview && this.world.mode === 'customize') {
@@ -327,23 +482,31 @@ export class Game {
 
   private syncUi(): void {
     const end = this.world.result
-    const key = `${this.world.mode}|${end?.result ?? ''}|${end?.reason ?? ''}|${end?.round ?? ''}|${end?.playerHp ?? ''}|${end?.enemyHp ?? ''}`
+    const key = `${this.world.mode}|${end?.result ?? ''}|${end?.reason ?? ''}|${end?.round ?? ''}|${end?.playerHp ?? ''}|${end?.enemyHp ?? ''}|${end?.coins ?? ''}|${this.progress.coins}|${this.progress.cleared}`
     if (key !== this.modeKey) {
       this.modeKey = key
       this.onMode(this.world.mode, end)
     }
     const player = getPlayer(this.world)
+    const rivals = this.world.lineup.length || this.world.goats.filter((g) => g.team === 'enemy').length
+    const title = this.world.fight === 'quick' && (this.world.mode === 'playing' || this.world.mode === 'countdown' || this.world.mode === 'paused' || this.world.mode === 'end')
+      ? `Quick · ${rivals === 1 ? '1 goat' : `${rivals} goats`}`
+      : this.world.mode === 'menu' || this.world.mode === 'customize' || this.world.mode === 'story' || this.world.mode === 'upgrades'
+        ? 'Billy Bash'
+        : `${this.world.round}. ${this.world.levelName}`
     const hud: HudModel = {
       visible: this.world.mode === 'playing' || this.world.mode === 'countdown' || this.world.mode === 'paused',
       round: this.world.round,
-      rivals: this.world.mode === 'menu' || this.world.mode === 'customize' ? difficulty(1).count : this.world.diff.count,
+      rivals,
       timeLeft: this.world.timeLeft,
       overtime: this.world.overtime,
       playerHp: Math.max(0, player?.hp ?? 0),
       playerMax: player?.maxHp ?? 100,
       muted: this.isMuted(),
+      title,
+      event: this.world.event,
     }
-    const hudKey = `${hud.visible}|${hud.round}|${hud.rivals}|${formatTime(hud.timeLeft)}|${hud.overtime}|${Math.ceil(hud.playerHp)}|${hud.muted}`
+    const hudKey = `${hud.visible}|${hud.title}|${hud.event}|${formatTime(hud.timeLeft)}|${hud.overtime}|${Math.ceil(hud.playerHp)}|${hud.playerMax}|${hud.muted}`
     if (hudKey !== this.hudKey) {
       this.hudKey = hudKey
       this.onHud(hud)
@@ -369,10 +532,11 @@ export class Game {
     }
     const hud = this.world.mode === 'playing' || this.world.mode === 'countdown' || this.world.mode === 'paused'
     const top = hud ? HUD_BAND : 0
-    const scale = Math.min(w / WORLD, (h - top) / WORLD)
+    const size = this.world.size
+    const scale = Math.min(w / size, (h - top) / size)
     this.cam.s = Math.max(0.01, scale)
-    this.cam.x = (w - WORLD * this.cam.s) / 2
-    this.cam.y = top + (h - top - WORLD * this.cam.s) / 2
+    this.cam.x = (w - size * this.cam.s) / 2
+    this.cam.y = top + (h - top - size * this.cam.s) / 2
   }
 
   private onDown(event: PointerEvent): void {
@@ -380,7 +544,7 @@ export class Game {
     this.audio.unlock()
     if (this.world.mode !== 'playing') return
     const player = getPlayer(this.world)
-    if (!player || player.dead) return
+    if (!player || player.dead || player.cooldown > 0) return
     const origin = this.toWorld(event.clientX, event.clientY)
     this.dragId = event.pointerId
     this.dragX = event.clientX
@@ -423,7 +587,7 @@ export class Game {
     this.cancelDrag()
     if (!player || !wasCharging) return
     if (this.world.mode !== 'playing' || player.dead || power < MIN_POWER) return
-    launchGoat(this.world, player, angle, power, 1, this.hooks)
+    launchGoat(this.world, player, angle, power, this.hooks)
     try {
       navigator.vibrate?.(10 + Math.round(power * 18))
     } catch {
@@ -465,10 +629,4 @@ function paintFitted(
   if (!ctx) return
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   draw(ctx, w, h)
-}
-
-export function nextRoundLabel(round: number): string {
-  const next = difficulty(round + 1)
-  const label = next.count === 1 ? '1 rival' : `${next.count} rivals`
-  return `Next round · ${label}`
 }
