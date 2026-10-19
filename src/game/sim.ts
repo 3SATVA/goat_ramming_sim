@@ -21,7 +21,7 @@ import {
   WORLD,
 } from './constants'
 import { roleProfile, type FightPlan } from './progress'
-import type { BossKind, Difficulty, EndResult, Goat, Hazard, Particle, SimHooks, Stats, Team, World } from './types'
+import type { BossKind, BossTell, Difficulty, EndResult, Goat, Hazard, Particle, SimHooks, Stats, Team, World } from './types'
 import { clamp, lerpAngle } from './util'
 
 export function emptyStats(): Stats {
@@ -88,6 +88,7 @@ export function createWorld(color: string, minutes: 2 | 3, reduce: boolean): Wor
     theme: 'yard',
     size: WORLD,
     hazards: [],
+    zones: [],
     gust: 0,
     gustBoost: 0,
     gustAngle: 0,
@@ -139,6 +140,7 @@ export function applyPlan(world: World, plan: FightPlan): void {
   world.windAngle = plan.windAngle
   world.diff = plan.diff
   world.hazards = plan.hazards.map((hazard) => ({ ...hazard }))
+  world.zones = []
   world.lineup = plan.slots.map((slot) => ({ ...slot }))
   world.coinReward = plan.coins
   world.timeLeft = plan.minutes * 60
@@ -169,6 +171,7 @@ export function setupMatch(world: World): void {
   world.lastBlow = 'ram'
   world.gust = 0
   world.gustBoost = 0
+  world.zones = []
   if (world.round > 1 || world.fight === 'quick') world.hint = false
 
   const size = world.size
@@ -238,7 +241,8 @@ export function launchGoat(
 ): void {
   const p = clamp(power, 0, 1)
   const storm = world.event === 'sandstorm' ? 0.78 : 1
-  let speed = (MIN_LAUNCH + p * (MAX_LAUNCH - MIN_LAUNCH)) * goat.speedMul * storm
+  const chill = goat.chill > 0 ? 0.58 : 1
+  let speed = (MIN_LAUNCH + p * (MAX_LAUNCH - MIN_LAUNCH)) * goat.speedMul * storm * chill
   const drag = Math.max(0.25, eventDrag(world))
   const need = (world.size - FENCE * 2) * (p > 0.7 ? 0.82 : 0.46)
   const coast = speed / drag
@@ -265,9 +269,8 @@ export function launchGoat(
   if (goat.team === 'player') {
     world.stats.launches += 1
     world.hint = false
-    const snow = world.event === 'snowstorm' ? 1.45 : 1
-    goat.cooldown = world.recharge * snow
-    goat.cooldownMax = goat.cooldown
+    goat.cooldown = 0
+    goat.cooldownMax = 0
   }
   if (!world.reduce) world.shake = Math.max(world.shake, 1.2 + p * 2.4)
   burst(world, goat.x - Math.cos(angle) * 10, goat.y - Math.sin(angle) * 10, '#efe6c9', 8, 90, 'dust')
@@ -327,6 +330,7 @@ function simulate(world: World, dt: number, hooks: SimHooks): void {
     goat.squash = Math.max(0, goat.squash - dt * 2.6)
     goat.fenceCd = Math.max(0, goat.fenceCd - dt)
     goat.hazardCd = Math.max(0, goat.hazardCd - dt)
+    goat.chill = Math.max(0, goat.chill - dt)
     goat.stun = Math.max(0, goat.stun - dt)
     goat.fx = Math.max(0, goat.fx - dt)
     if (goat.glide > 0) goat.glide = Math.max(0, goat.glide - dt)
@@ -363,6 +367,11 @@ function simulate(world: World, dt: number, hooks: SimHooks): void {
       const damp = Math.exp(-drag * dt)
       goat.vx *= damp
       goat.vy *= damp
+      if (goat.chill > 0 && goat.glide <= 0) {
+        const icy = Math.exp(-3.1 * dt)
+        goat.vx *= icy
+        goat.vy *= icy
+      }
       if (goat.glide <= 0) slowInDunes(world, goat, dt)
       pushWeather(world, goat, dt)
       const speed = Math.hypot(goat.vx, goat.vy)
@@ -379,6 +388,8 @@ function simulate(world: World, dt: number, hooks: SimHooks): void {
     goat.x += goat.vx * dt
     goat.y += goat.vy * dt
   }
+
+  updateZones(world, dt, hooks)
 
   for (const goat of world.goats) {
     if (goat.dead) continue
@@ -459,11 +470,18 @@ function updateEnemy(world: World, goat: Goat, target: Goat, dt: number, hooks: 
   const diff = world.diff
   goat.cooldown = Math.max(0, goat.cooldown - dt)
   if (goat.stun > 0) {
-    if (goat.ai === 'windup') goat.ai = 'idle'
+    if (goat.ai === 'windup') {
+      goat.ai = 'idle'
+      goat.tell = null
+    }
     return
   }
   if (goat.ai === 'windup') {
-    if (goat.aiTimer > 0.18) {
+    if (goat.tell === 'vortex' && goat.aiTimer > 0.22) {
+      goat.markX = target.x
+      goat.markY = target.y
+      goat.aimAngle = Math.atan2(target.y - goat.y, target.x - goat.x)
+    } else if (goat.aiTimer > 0.18) {
       const desired = planAngle(world, goat, target)
       goat.aimAngle = lerpAngle(goat.aimAngle, desired, 1 - Math.exp(-diff.aimTrack * dt))
     }
@@ -471,14 +489,19 @@ function updateEnemy(world: World, goat: Goat, target: Goat, dt: number, hooks: 
     goat.aiTimer -= dt
     if (goat.aiTimer <= 0) {
       const plan = goat.plan
-      launchGoat(world, goat, goat.aimAngle, goat.aimPower, hooks)
+      const tell = goat.tell
+      goat.tell = null
+      if (tell === 'breath') castBreath(world, goat, hooks)
+      else if (tell === 'vortex') castVortex(world, goat, hooks)
+      else launchGoat(world, goat, goat.aimAngle, goat.aimPower, hooks)
       const cdMul = goat.pendingCd > 0 ? goat.pendingCd : 1
       goat.pendingCd = 0
       if (goat.boss && plan !== 'dodge') goat.bossStep += 1
       const snow = world.event === 'snowstorm' ? 1.35 : 1
+      const rapid = tell === 'combo'
       goat.ai = 'recover'
-      goat.aiTimer = (plan === 'dodge' ? diff.recover * 0.6 : diff.recover) * snow
-      goat.cooldown = diff.cooldown * (plan === 'dodge' ? 0.4 : 1) * snow * cdMul
+      goat.aiTimer = (plan === 'dodge' ? diff.recover * 0.6 : rapid ? 0.08 : diff.recover) * snow
+      goat.cooldown = (rapid ? 0.1 : diff.cooldown * (plan === 'dodge' ? 0.4 : 1) * cdMul) * snow
       goat.plan = 'attack'
       goat.sawAim = false
     }
@@ -517,37 +540,146 @@ function windupSlotFree(world: World): boolean {
 
 function beginAttack(world: World, goat: Goat, target: Goat, dist: number): void {
   const diff = world.diff
-  const pattern = bossPattern(goat)
-  const power = pattern ? pattern.power : ramPower(dist, goat.radius)
-  const plan = pattern ? 'attack' : pickAttack(world, goat, target, power)
+  const move = bossMove(goat, diff)
+  if (move) {
+    goat.pendingGlide = move.glide
+    goat.pendingGust = move.gust
+    goat.pendingCd = move.cooldownMul
+    goat.tell = move.tell
+    goat.markX = target.x
+    goat.markY = target.y
+    const angle =
+      move.cast === 'ram' ? attackAngle(world, goat, target, move.power) : Math.atan2(target.y - goat.y, target.x - goat.x)
+    beginWindup(goat, 'attack', angle, move.power, move.windup)
+    return
+  }
+  const power = ramPower(dist, goat.radius)
+  const plan = pickAttack(world, goat, target, power)
   const angle = plan === 'bounce' ? bankAngle(world, goat, target, power) : attackAngle(world, goat, target, power)
-  const windup = pattern
-    ? Math.max(0.44, diff.windup * pattern.windupMul)
-    : power < 0.42
-      ? Math.max(0.44, diff.windup * 0.62)
-      : diff.windup
-  goat.pendingGlide = pattern?.glide ?? 0
-  goat.pendingGust = pattern?.gust ?? 0
-  goat.pendingCd = pattern?.cooldownMul ?? 0
+  const windup = power < 0.42 ? Math.max(0.44, diff.windup * 0.62) : diff.windup
+  goat.pendingGlide = 0
+  goat.pendingGust = 0
+  goat.pendingCd = 0
+  goat.tell = null
   beginWindup(goat, plan, angle, power, windup)
 }
 
-function bossPattern(goat: Goat): { power: number; windupMul: number; glide: number; gust: number; cooldownMul: number } | null {
+interface BossMove {
+  cast: 'ram' | 'breath' | 'vortex'
+  power: number
+  windup: number
+  glide: number
+  gust: number
+  cooldownMul: number
+  tell: BossTell | null
+}
+
+function bossMove(goat: Goat, diff: Difficulty): BossMove | null {
   if (!goat.boss) return null
   const step = goat.bossStep
+  const wind = (mul: number, floor = 0.44) => Math.max(floor, diff.windup * mul)
   if (goat.boss === 'yard') {
-    return step % 2 === 0
-      ? { power: 1, windupMul: 1.55, glide: 0.9, gust: 0, cooldownMul: 1 }
-      : { power: 0.52, windupMul: 0.72, glide: 0, gust: 0, cooldownMul: 1 }
+    if (step % 4 < 3) {
+      return { cast: 'ram', power: 0.96, windup: wind(0.48, 0.34), glide: 0.45, gust: 0, cooldownMul: 0.16, tell: 'combo' }
+    }
+    return { cast: 'ram', power: 1, windup: wind(1.55), glide: 1.05, gust: 0, cooldownMul: 1, tell: null }
   }
   if (goat.boss === 'frost') {
-    return step % 2 === 0
-      ? { power: 1, windupMul: 1.75, glide: 1.65, gust: 0, cooldownMul: 1 }
-      : { power: 0.46, windupMul: 0.62, glide: 0.25, gust: 0, cooldownMul: 1 }
+    if (step % 3 === 0) {
+      return { cast: 'breath', power: 0, windup: Math.max(1.05, diff.windup * 1.12), glide: 0, gust: 0, cooldownMul: 0.7, tell: 'breath' }
+    }
+    if (step % 3 === 1) {
+      return { cast: 'ram', power: 1, windup: wind(1.75), glide: 1.65, gust: 0, cooldownMul: 1, tell: null }
+    }
+    return { cast: 'ram', power: 0.46, windup: wind(0.62), glide: 0.25, gust: 0, cooldownMul: 1, tell: null }
   }
-  return step % 4 !== 3
-    ? { power: 0.34, windupMul: 0.5, glide: 0, gust: 0, cooldownMul: 0.32 }
-    : { power: 1, windupMul: 1.2, glide: 0.4, gust: 120, cooldownMul: 1 }
+  if (step % 4 === 0) {
+    return { cast: 'vortex', power: 0, windup: 1.05, glide: 0, gust: 0, cooldownMul: 0.55, tell: 'vortex' }
+  }
+  if (step % 4 === 3) {
+    return { cast: 'ram', power: 1, windup: wind(1.2), glide: 0.4, gust: 120, cooldownMul: 1, tell: null }
+  }
+  return { cast: 'ram', power: 0.34, windup: wind(0.5), glide: 0, gust: 0, cooldownMul: 0.32, tell: null }
+}
+
+function castBreath(world: World, goat: Goat, hooks: SimHooks): void {
+  goat.pendingGlide = 0
+  goat.pendingGust = 0
+  const reach = 380
+  const half = 0.62
+  for (const other of world.goats) {
+    if (other.dead || other.id === goat.id) continue
+    const dx = other.x - goat.x
+    const dy = other.y - goat.y
+    const dist = Math.hypot(dx, dy)
+    if (dist > reach || dist < 1) continue
+    const ang = Math.atan2(dy, dx)
+    const delta = Math.atan2(Math.sin(ang - goat.aimAngle), Math.cos(ang - goat.aimAngle))
+    if (Math.abs(delta) > half) continue
+    other.chill = Math.max(other.chill, 2.6)
+    applyDamage(world, other, 8 + goat.damageMul * 4, goat, hooks, false, 'ice')
+  }
+  const ahead = 160
+  world.zones.push({
+    kind: 'ice',
+    x: clamp(goat.x + Math.cos(goat.aimAngle) * ahead, FENCE + 48, world.size - FENCE - 48),
+    y: clamp(goat.y + Math.sin(goat.aimAngle) * ahead, FENCE + 48, world.size - FENCE - 48),
+    r: 96,
+    life: 5,
+    max: 5,
+    tick: 0,
+  })
+  if (world.zones.length > 6) world.zones.splice(0, world.zones.length - 6)
+  goat.squash = 0.45
+  burst(world, goat.x + Math.cos(goat.aimAngle) * 70, goat.y + Math.sin(goat.aimAngle) * 70, '#d7f4ff', 16, 180, 'spark')
+  hooks.whoosh(0.85)
+  hooks.bleat(goat.team)
+}
+
+function castVortex(world: World, goat: Goat, hooks: SimHooks): void {
+  goat.pendingGlide = 0
+  goat.pendingGust = 0
+  world.zones.push({
+    kind: 'vortex',
+    x: clamp(goat.markX, FENCE + 48, world.size - FENCE - 48),
+    y: clamp(goat.markY, FENCE + 48, world.size - FENCE - 48),
+    r: 120,
+    life: 2.8,
+    max: 2.8,
+    tick: 0.08,
+  })
+  if (world.zones.length > 6) world.zones.splice(0, world.zones.length - 6)
+  goat.squash = 0.4
+  burst(world, goat.markX, goat.markY, '#ffcf70', 18, 150, 'dust')
+  hooks.whoosh(0.7)
+  hooks.bleat(goat.team)
+}
+
+function updateZones(world: World, dt: number, hooks: SimHooks): void {
+  for (const zone of world.zones) {
+    zone.life -= dt
+    const pulse = zone.kind === 'vortex' && zone.tick <= 0
+    if (zone.kind === 'vortex') zone.tick -= dt
+    for (const goat of world.goats) {
+      if (goat.dead || goat.role === 'boss') continue
+      const dx = zone.x - goat.x
+      const dy = zone.y - goat.y
+      const dist = Math.hypot(dx, dy)
+      if (dist > zone.r) continue
+      if (zone.kind === 'ice') {
+        goat.chill = Math.max(goat.chill, 0.55)
+        continue
+      }
+      if (dist > 8) {
+        const pull = 480 * (1 - dist / zone.r)
+        goat.vx += (dx / dist) * pull * dt
+        goat.vy += (dy / dist) * pull * dt
+      }
+      if (pulse && dist < zone.r * 0.6) applyDamage(world, goat, 5, null, hooks, false, 'vortex')
+    }
+    if (pulse) zone.tick = 0.48
+  }
+  world.zones = world.zones.filter((zone) => zone.life > 0)
 }
 
 function ramPower(dist: number, radius: number): number {
@@ -561,6 +693,7 @@ function beginWindup(goat: Goat, plan: Goat['plan'], angle: number, power: numbe
     goat.pendingGlide = 0
     goat.pendingGust = 0
     goat.pendingCd = 0
+    goat.tell = null
   }
   goat.plan = plan
   goat.ai = 'windup'
@@ -872,13 +1005,15 @@ function applyDamage(
   attacker: Goat | null,
   hooks: SimHooks,
   silent: boolean,
-  kind: 'ram' | 'fire' | 'hazard',
+  kind: 'ram' | 'fire' | 'hazard' | 'ice' | 'vortex',
 ): void {
   if (goat.dead || amount <= 0 || world.mode !== 'playing') return
   goat.hp -= amount
   if (!silent) {
     goat.flash = 0.16
     const shown = Math.max(1, Math.round(amount))
+    const color =
+      kind === 'fire' ? '#ffb088' : kind === 'ice' ? '#d7f4ff' : kind === 'vortex' ? '#ffcf70' : kind === 'hazard' ? '#e6c98a' : '#fff6e4'
     world.floaters.push({
       x: goat.x + (Math.random() - 0.5) * 10,
       y: goat.y - goat.radius - 8,
@@ -886,7 +1021,7 @@ function applyDamage(
       life: 0.7,
       max: 0.7,
       text: `-${shown}`,
-      color: kind === 'fire' ? '#ffb088' : kind === 'hazard' ? '#e6c98a' : '#fff6e4',
+      color,
     })
     if (world.floaters.length > 24) world.floaters.splice(0, world.floaters.length - 24)
     if (attacker?.team === 'player' && goat.team === 'enemy' && kind === 'ram') {
@@ -901,7 +1036,7 @@ function applyDamage(
   if (goat.hp > 0) return
   goat.hp = 0
   goat.dead = true
-  world.lastBlow = kind === 'hazard' ? 'hazard' : kind
+  world.lastBlow = kind === 'ram' || kind === 'fire' ? kind : 'hazard'
   goat.charging = false
   goat.vx *= 0.25
   goat.vy *= 0.25
@@ -1115,5 +1250,9 @@ function makeGoat(partial: {
     pendingCd: 0,
     hazardCd: 0,
     bossStep: 0,
+    tell: null,
+    markX: 0,
+    markY: 0,
+    chill: 0,
   }
 }

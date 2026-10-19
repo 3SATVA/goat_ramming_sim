@@ -262,7 +262,7 @@ function endCopy(end: EndResult): { title: string; body: string } {
     return { title: 'Burned out', body: 'The fence caught you and would not let go.' }
   }
   if (end.result === 'lose' && end.blow === 'hazard') {
-    return { title: 'Caught out', body: 'Spikes or stinging sand took you down.' }
+    return { title: 'Caught out', body: 'Spikes, a sand vortex, or icy breath took you down.' }
   }
   if (end.result === 'lose' && end.reason === 'ko') {
     return { title: 'Knocked out', body: 'The other goat got the last ram.' }

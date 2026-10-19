@@ -2,7 +2,7 @@ import { FENCE } from './constants'
 import type { ArenaEvent, BossKind, Difficulty, Hazard, Role, Theme } from './types'
 import { clamp, colorDist } from './util'
 
-export type StatId = 'power' | 'hp' | 'weight' | 'speed' | 'recharge' | 'fire'
+export type StatId = 'power' | 'hp' | 'weight' | 'speed' | 'fire'
 export type FightKind = 'story' | 'quick'
 
 export interface Upgrades {
@@ -10,6 +10,7 @@ export interface Upgrades {
   hp: number
   weight: number
   speed: number
+  /** Older saves may still store this. It is kept on load and is not sold or applied. */
   recharge: number
   fire: number
 }
@@ -33,7 +34,6 @@ export const STATS: StatDef[] = [
   { id: 'hp', name: 'Stamina', blurb: 'A bigger health bar.', max: 8 },
   { id: 'weight', name: 'Weight', blurb: 'Harder to shove, and you shove harder.', max: 8 },
   { id: 'speed', name: 'Launch', blurb: 'Faster rams.', max: 6 },
-  { id: 'recharge', name: 'Recharge', blurb: 'Pull again sooner after a ram.', max: 6 },
   { id: 'fire', name: 'Fire coat', blurb: 'The burning fence hurts less.', max: 6 },
 ]
 
@@ -148,7 +148,7 @@ export const CHAPTERS: ChapterDef[] = [
       },
       {
         name: 'Gnasher',
-        blurb: 'The yard boss. He takes the whole pen in one charge.',
+        blurb: 'The yard boss opens with three rapid charges, then a freight-train ram.',
         minutes: 3,
         event: 'wind',
         size: 980,
@@ -204,7 +204,7 @@ export const CHAPTERS: ChapterDef[] = [
       },
       {
         name: 'Frostbite',
-        blurb: 'The ice boss rides a glacier charge through the storm.',
+        blurb: 'The ice boss breathes a freezing cone, then charges across the ice.',
         minutes: 3,
         event: 'snowstorm',
         size: 1180,
@@ -222,7 +222,7 @@ export const CHAPTERS: ChapterDef[] = [
   {
     id: 3,
     name: 'The Dunes',
-    blurb: 'Sand, cactus, and a grinding sandstorm.',
+    blurb: 'Sand, spike clusters, and a grinding sandstorm.',
     theme: 'desert',
     levels: [
       {
@@ -264,7 +264,7 @@ export const CHAPTERS: ChapterDef[] = [
       },
       {
         name: 'Duneking',
-        blurb: 'The desert boss jabs, then kicks up a personal gale.',
+        blurb: 'The desert boss drops a sand vortex, jabs, then kicks up a gale.',
         minutes: 3,
         event: 'sandstorm',
         size: 1360,
@@ -324,7 +324,7 @@ export function loadoutFrom(upgrades: Upgrades): Loadout {
     mass: 1 + upgrades.weight * 0.16,
     damage: 1 + upgrades.power * 0.14,
     speed: 1 + upgrades.speed * 0.07,
-    recharge: Math.max(0.08, 0.42 - upgrades.recharge * 0.055),
+    recharge: 0,
     fire: Math.max(0.32, 1 - upgrades.fire * 0.11),
   }
 }
@@ -335,7 +335,6 @@ export function statEffect(id: StatId, level: number): string {
   if (id === 'hp') return `${preview.maxHp} max HP`
   if (id === 'weight') return `${Math.round(preview.mass * 100)}% weight`
   if (id === 'speed') return `${Math.round(preview.speed * 100)}% launch speed`
-  if (id === 'recharge') return `${preview.recharge.toFixed(2)}s between rams`
   return `${Math.round(preview.fire * 100)}% fire damage`
 }
 
@@ -346,11 +345,11 @@ export function roleProfile(role: Exclude<Role, 'player'>, boss: BossKind | null
   speed: number
   damage: number
 } {
-  if (boss === 'yard') return { radius: 58, hp: 150, mass: 1.7, speed: 0.84, damage: 0.95 }
-  if (boss === 'frost') return { radius: 60, hp: 165, mass: 1.65, speed: 0.8, damage: 0.92 }
-  if (boss === 'dune') return { radius: 60, hp: 175, mass: 1.75, speed: 0.82, damage: 0.9 }
+  if (boss === 'yard') return { radius: 58, hp: 150, mass: 1.7, speed: 0.84, damage: 3 }
+  if (boss === 'frost') return { radius: 60, hp: 165, mass: 1.65, speed: 0.8, damage: 2.8 }
+  if (boss === 'dune') return { radius: 60, hp: 175, mass: 1.75, speed: 0.82, damage: 3.1 }
   if (role === 'grunt') return { radius: 32, hp: 48, mass: 0.66, speed: 0.84, damage: 0.58 }
-  if (role === 'boss') return { radius: 58, hp: 150, mass: 1.7, speed: 0.84, damage: 0.95 }
+  if (role === 'boss') return { radius: 58, hp: 150, mass: 1.7, speed: 0.84, damage: 2.8 }
   return { radius: 40, hp: 72, mass: 1, speed: 0.92, damage: 0.82 }
 }
 
@@ -506,7 +505,7 @@ function placeHazards(level: ChapterLevel): Hazard[] {
   for (let i = 0; i < level.spikes; i++) {
     const at = spikes[i % spikes.length] ?? [0.5, 0.5]
     const p = spot(at[0], at[1])
-    hazards.push({ kind: 'spike', x: p.x, y: p.y, r: 18, life: -1 })
+    hazards.push({ kind: 'spike', x: p.x, y: p.y, r: 42, life: -1 })
   }
   for (let i = 0; i < level.dunes; i++) {
     const at = dunes[i % dunes.length] ?? [0.5, 0.5]
