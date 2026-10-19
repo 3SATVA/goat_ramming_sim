@@ -52,6 +52,7 @@ export interface Snapshot {
   size: number
   coins: number
   cleared: number
+  hazards: number
   goats: {
     name: string
     team: string
@@ -358,6 +359,7 @@ export class Game {
       size: this.world.size,
       coins: this.progress.coins,
       cleared: this.progress.cleared,
+      hazards: this.world.hazards.length,
       goats: this.world.goats.map((g) => ({
         name: g.name,
         team: g.team,
