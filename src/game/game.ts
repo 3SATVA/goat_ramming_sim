@@ -50,6 +50,11 @@ export interface Snapshot {
   event: string
   theme: Theme
   size: number
+  shape: string
+  width: number
+  height: number
+  cam: { x: number; y: number; s: number }
+  view: { w: number; h: number }
   coins: number
   cleared: number
   hazards: number
@@ -70,6 +75,9 @@ export interface Snapshot {
     tell: string | null
     chill: number
     damageMul: number
+    mass: number
+    speedMul: number
+    cooldown: number
     dead: boolean
     charging: boolean
     chargePower: number
@@ -295,6 +303,9 @@ export class Game {
     this.world.round = 1
     this.world.shake = 0
     this.world.theme = 'yard'
+    this.world.shape = 'square'
+    this.world.width = 800
+    this.world.height = 800
     this.world.size = 800
     this.world.event = 'clear'
     this.world.hazards = []
@@ -363,6 +374,15 @@ export class Game {
       event: this.world.event,
       theme: this.world.theme,
       size: this.world.size,
+      shape: this.world.shape,
+      width: this.world.width,
+      height: this.world.height,
+      cam: {
+        x: Math.round(this.cam.x),
+        y: Math.round(this.cam.y),
+        s: Math.round(this.cam.s * 1000) / 1000,
+      },
+      view: { w: Math.round(this.viewW), h: Math.round(this.viewH) },
       coins: this.progress.coins,
       cleared: this.progress.cleared,
       hazards: this.world.hazards.length,
@@ -391,6 +411,9 @@ export class Game {
         tell: g.tell,
         chill: Math.round(g.chill * 10) / 10,
         damageMul: g.damageMul,
+        mass: Math.round(g.mass * 100) / 100,
+        speedMul: Math.round(g.speedMul * 100) / 100,
+        cooldown: Math.round(g.cooldown * 100) / 100,
         dead: g.dead,
         charging: g.charging,
         chargePower: Math.round(g.chargePower * 100) / 100,
@@ -460,7 +483,7 @@ export class Game {
     }
     const player = getPlayer(this.world)
     if (this.dragId !== null && player && !player.charging) this.cancelDrag()
-    this.layout()
+    this.layout(dt)
     this.render()
     this.syncUi()
     requestAnimationFrame(this.frame)
@@ -533,10 +556,10 @@ export class Game {
   }
 
   private resize(): void {
-    this.layout()
+    this.layout(0)
   }
 
-  private layout(): void {
+  private layout(dt: number): void {
     const w = this.canvas.clientWidth
     const h = this.canvas.clientHeight
     if (w < 2 || h < 2) return
@@ -551,11 +574,33 @@ export class Game {
     }
     const hud = this.world.mode === 'playing' || this.world.mode === 'countdown' || this.world.mode === 'paused'
     const top = hud ? HUD_BAND : 0
-    const size = this.world.size
-    const scale = Math.min(w / size, (h - top) / size)
-    this.cam.s = Math.max(0.01, scale)
-    this.cam.x = (w - size * this.cam.s) / 2
-    this.cam.y = top + (h - top - size * this.cam.s) / 2
+    const worldW = this.world.width
+    const worldH = this.world.height
+    const availW = w
+    const availH = Math.max(1, h - top)
+    const fit = Math.min(availW / worldW, availH / worldH)
+    const followScale = Math.min(availW / 900, availH / 760)
+    const quickLarge = this.world.fight === 'quick' && (worldW > 1000 || worldH > 1000)
+    const scrolling = quickLarge && (worldW * followScale > availW + 24 || worldH * followScale > availH + 24)
+    const s = Math.max(0.01, scrolling ? followScale : fit)
+    const player = getPlayer(this.world)
+    const focusX = player ? w / 2 - player.x * s : (availW - worldW * s) / 2
+    const focusY = player ? top + availH / 2 - player.y * s : top + (availH - worldH * s) / 2
+    const worldPxW = worldW * s
+    const worldPxH = worldH * s
+    const x = worldPxW <= availW + 0.5 ? (availW - worldPxW) / 2 : clamp(focusX, availW - worldPxW, 0)
+    const y = worldPxH <= availH + 0.5 ? top + (availH - worldPxH) / 2 : clamp(focusY, top + availH - worldPxH, top)
+    const jump = Math.hypot(x - this.cam.x, y - this.cam.y)
+    if (!scrolling || dt <= 0 || jump > 500) {
+      this.cam.x = x
+      this.cam.y = y
+      this.cam.s = s
+      return
+    }
+    const k = 1 - Math.exp(-7 * dt)
+    this.cam.x += (x - this.cam.x) * k
+    this.cam.y += (y - this.cam.y) * k
+    this.cam.s += (s - this.cam.s) * k
   }
 
   private onDown(event: PointerEvent): void {
@@ -628,6 +673,10 @@ export class Game {
       y: (clientY - rect.top - this.cam.y) / this.cam.s,
     }
   }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
 }
 
 function paintFitted(

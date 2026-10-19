@@ -20,6 +20,7 @@ import {
   PLAYER_HP,
   WORLD,
 } from './constants'
+import { clampToArena, laneX, roundShape } from './arena'
 import { roleProfile, type FightPlan } from './progress'
 import type { BossKind, BossTell, Difficulty, EndResult, Goat, Hazard, Particle, SimHooks, Stats, Team, World } from './types'
 import { clamp, lerpAngle } from './util'
@@ -86,6 +87,9 @@ export function createWorld(color: string, minutes: 2 | 3, reduce: boolean): Wor
     speed: 1,
     fire: 1,
     theme: 'yard',
+    shape: 'square',
+    width: WORLD,
+    height: WORLD,
     size: WORLD,
     hazards: [],
     zones: [],
@@ -111,8 +115,8 @@ export function spawnMenuGoat(world: World): void {
       name: 'You',
       team: 'player',
       color: world.color,
-      x: world.size / 2,
-      y: world.size * 0.72,
+      x: world.width / 2,
+      y: world.height * 0.72,
       facing: -Math.PI / 2,
       hp: world.maxHp,
       maxHp: world.maxHp,
@@ -136,6 +140,9 @@ export function applyPlan(world: World, plan: FightPlan): void {
   world.minutes = plan.minutes
   world.event = plan.event
   world.theme = plan.theme
+  world.shape = plan.shape
+  world.width = plan.width
+  world.height = plan.height
   world.size = plan.size
   world.windAngle = plan.windAngle
   world.diff = plan.diff
@@ -174,17 +181,17 @@ export function setupMatch(world: World): void {
   world.zones = []
   if (world.round > 1 || world.fight === 'quick') world.hint = false
 
-  const size = world.size
   const goats: Goat[] = []
   const playerRadius = GOAT_RADIUS
+  const playerSpot = spawnSpot(world, 'player', 0, 1, playerRadius)
   goats.push(
     makeGoat({
       id: world.nextId++,
       name: 'You',
       team: 'player',
       color: world.color,
-      x: size / 2,
-      y: size - FENCE - playerRadius - 28,
+      x: playerSpot.x,
+      y: playerSpot.y,
       facing: -Math.PI / 2,
       hp: world.maxHp,
       maxHp: world.maxHp,
@@ -198,22 +205,18 @@ export function setupMatch(world: World): void {
   )
 
   const slots = world.lineup
-  const profiles = slots.map((slot) => roleProfile(slot.role, slot.boss))
-  const maxR = Math.max(playerRadius, ...profiles.map((profile) => profile.radius))
-  const y = FENCE + maxR + 36
-  const margin = FENCE + maxR + 24
+  const profiles = slots.map((slot) => slot.stats ?? roleProfile(slot.role, slot.boss))
   slots.forEach((slot, index) => {
     const profile = profiles[index] ?? roleProfile('rival', null)
-    const span = size - margin * 2
-    const x = slots.length === 1 ? size / 2 : margin + (span * index) / (slots.length - 1)
+    const spot = spawnSpot(world, 'enemy', index, slots.length, profile.radius)
     goats.push(
       makeGoat({
         id: world.nextId++,
         name: slot.name,
         team: 'enemy',
         color: slot.color,
-        x,
-        y,
+        x: spot.x,
+        y: spot.y,
         facing: Math.PI / 2,
         hp: profile.hp,
         maxHp: profile.hp,
@@ -224,12 +227,26 @@ export function setupMatch(world: World): void {
         fireMul: 1,
         role: slot.role,
         boss: slot.boss,
-        cooldown: 0.55 + index * 1.15 + Math.random() * 0.35,
+        cooldown: 0.28 + index * 0.38 + Math.random() * 0.2,
         cooldownMax: world.diff.cooldown,
       }),
     )
   })
   world.goats = goats
+}
+
+function spawnSpot(world: World, team: 'player' | 'enemy', index: number, count: number, radius: number): { x: number; y: number } {
+  const reach = (world.height / 2 - FENCE - radius) * 0.66
+  const y =
+    team === 'player'
+      ? roundShape(world.shape)
+        ? world.height / 2 + reach
+        : world.height - FENCE - radius - 28
+      : roundShape(world.shape)
+        ? world.height / 2 - reach
+        : FENCE + radius + 36
+  const x = team === 'player' ? world.width / 2 : laneX(world.shape, world.width, world.height, y, index, count, radius + 8)
+  return clampToArena(world.shape, world.width, world.height, x, y, FENCE + radius + 4)
 }
 
 export function launchGoat(
@@ -244,7 +261,7 @@ export function launchGoat(
   const chill = goat.chill > 0 ? 0.58 : 1
   let speed = (MIN_LAUNCH + p * (MAX_LAUNCH - MIN_LAUNCH)) * goat.speedMul * storm * chill
   const drag = Math.max(0.25, eventDrag(world))
-  const need = (world.size - FENCE * 2) * (p > 0.7 ? 0.82 : 0.46)
+  const need = (Math.min(world.width, world.height) - FENCE * 2) * (p > 0.7 ? 0.82 : 0.46)
   const coast = speed / drag
   if (coast < need) speed *= Math.min(1.7, need / coast)
   goat.vx = Math.cos(angle) * speed
@@ -557,7 +574,7 @@ function beginAttack(world: World, goat: Goat, target: Goat, dist: number): void
   const plan = pickAttack(world, goat, target, power)
   const angle = plan === 'bounce' ? bankAngle(world, goat, target, power) : attackAngle(world, goat, target, power)
   const windup = power < 0.42 ? Math.max(0.44, diff.windup * 0.62) : diff.windup
-  goat.pendingGlide = 0
+  goat.pendingGlide = power > 0.7 ? 0.9 : power > 0.45 ? 0.35 : 0
   goat.pendingGust = 0
   goat.pendingCd = 0
   goat.tell = null
@@ -586,7 +603,7 @@ function bossMove(goat: Goat, diff: Difficulty): BossMove | null {
   }
   if (goat.boss === 'frost') {
     if (step % 3 === 0) {
-      return { cast: 'breath', power: 0, windup: Math.max(1.05, diff.windup * 1.12), glide: 0, gust: 0, cooldownMul: 0.7, tell: 'breath' }
+      return { cast: 'breath', power: 0, windup: Math.max(1.05, diff.windup * 1.12), glide: 0, gust: 0, cooldownMul: 0.48, tell: 'breath' }
     }
     if (step % 3 === 1) {
       return { cast: 'ram', power: 1, windup: wind(1.75), glide: 1.65, gust: 0, cooldownMul: 1, tell: null }
@@ -594,7 +611,7 @@ function bossMove(goat: Goat, diff: Difficulty): BossMove | null {
     return { cast: 'ram', power: 0.46, windup: wind(0.62), glide: 0.25, gust: 0, cooldownMul: 1, tell: null }
   }
   if (step % 4 === 0) {
-    return { cast: 'vortex', power: 0, windup: 1.05, glide: 0, gust: 0, cooldownMul: 0.55, tell: 'vortex' }
+    return { cast: 'vortex', power: 0, windup: 1.05, glide: 0, gust: 0, cooldownMul: 0.4, tell: 'vortex' }
   }
   if (step % 4 === 3) {
     return { cast: 'ram', power: 1, windup: wind(1.2), glide: 0.4, gust: 120, cooldownMul: 1, tell: null }
@@ -622,12 +639,19 @@ function castBreath(world: World, goat: Goat, hooks: SimHooks): void {
   const ahead = 160
   world.zones.push({
     kind: 'ice',
-    x: clamp(goat.x + Math.cos(goat.aimAngle) * ahead, FENCE + 48, world.size - FENCE - 48),
-    y: clamp(goat.y + Math.sin(goat.aimAngle) * ahead, FENCE + 48, world.size - FENCE - 48),
+    ...clampToArena(
+      world.shape,
+      world.width,
+      world.height,
+      goat.x + Math.cos(goat.aimAngle) * ahead,
+      goat.y + Math.sin(goat.aimAngle) * ahead,
+      FENCE + 48,
+    ),
     r: 96,
     life: 5,
     max: 5,
     tick: 0,
+    power: 0,
   })
   if (world.zones.length > 6) world.zones.splice(0, world.zones.length - 6)
   goat.squash = 0.45
@@ -641,12 +665,12 @@ function castVortex(world: World, goat: Goat, hooks: SimHooks): void {
   goat.pendingGust = 0
   world.zones.push({
     kind: 'vortex',
-    x: clamp(goat.markX, FENCE + 48, world.size - FENCE - 48),
-    y: clamp(goat.markY, FENCE + 48, world.size - FENCE - 48),
+    ...clampToArena(world.shape, world.width, world.height, goat.markX, goat.markY, FENCE + 48),
     r: 120,
     life: 2.8,
     max: 2.8,
     tick: 0.08,
+    power: Math.max(6, 4 + goat.damageMul * 1.5),
   })
   if (world.zones.length > 6) world.zones.splice(0, world.zones.length - 6)
   goat.squash = 0.4
@@ -675,7 +699,7 @@ function updateZones(world: World, dt: number, hooks: SimHooks): void {
         goat.vx += (dx / dist) * pull * dt
         goat.vy += (dy / dist) * pull * dt
       }
-      if (pulse && dist < zone.r * 0.6) applyDamage(world, goat, 5, null, hooks, false, 'vortex')
+      if (pulse && dist < zone.r * 0.6) applyDamage(world, goat, zone.power, null, hooks, false, 'vortex')
     }
     if (pulse) zone.tick = 0.48
   }
@@ -747,21 +771,32 @@ function aimedPoint(world: World, goat: Goat, target: Goat, power: number): { x:
     vx = Math.cos(target.chargeAngle) * launch
     vy = Math.sin(target.chargeAngle) * launch
   }
-  const inset = FENCE + 72
-  return {
-    x: clamp(target.x + vx * flight, inset, world.size - inset),
-    y: clamp(target.y + vy * flight, inset, world.size - inset),
-  }
+  return clampToArena(world.shape, world.width, world.height, target.x + vx * flight, target.y + vy * flight, FENCE + 72)
 }
 
 function bankMirror(world: World, point: { x: number; y: number }): { x: number; y: number } | null {
-  const min = FENCE + GOAT_RADIUS
-  const max = world.size - min
+  if (roundShape(world.shape)) {
+    const pad = FENCE + GOAT_RADIUS
+    const rx = Math.max(12, world.width / 2 - pad)
+    const ry = Math.max(12, world.height / 2 - pad)
+    const px = point.x - world.width / 2
+    const py = point.y - world.height / 2
+    const n = (px * px) / (rx * rx) + (py * py) / (ry * ry)
+    if (n < 0.62) return null
+    const s = 1 / Math.sqrt(n)
+    const bx = world.width / 2 + px * s
+    const by = world.height / 2 + py * s
+    return { x: 2 * bx - point.x, y: 2 * by - point.y }
+  }
+  const minX = FENCE + GOAT_RADIUS
+  const maxX = world.width - minX
+  const minY = FENCE + GOAT_RADIUS
+  const maxY = world.height - minY
   const walls = [
-    { gap: point.x - min, x: 2 * min - point.x, y: point.y },
-    { gap: max - point.x, x: 2 * max - point.x, y: point.y },
-    { gap: point.y - min, x: point.x, y: 2 * min - point.y },
-    { gap: max - point.y, x: point.x, y: 2 * max - point.y },
+    { gap: point.x - minX, x: 2 * minX - point.x, y: point.y },
+    { gap: maxX - point.x, x: 2 * maxX - point.x, y: point.y },
+    { gap: point.y - minY, x: point.x, y: 2 * minY - point.y },
+    { gap: maxY - point.y, x: point.x, y: 2 * maxY - point.y },
   ]
   walls.sort((a, b) => a.gap - b.gap)
   const best = walls[0]
@@ -804,56 +839,62 @@ function dodgeAngle(world: World, goat: Goat, player: Goat): number {
   const score = (angle: number) => {
     const nx = goat.x + Math.cos(angle) * 150
     const ny = goat.y + Math.sin(angle) * 150
-    return -Math.hypot(nx - world.size / 2, ny - world.size / 2) - railPenalty(world, nx, ny)
+    return -Math.hypot(nx - world.width / 2, ny - world.height / 2) - railPenalty(world, nx, ny)
   }
   return score(left) >= score(right) ? left : right
 }
 
 function railPenalty(world: World, x: number, y: number): number {
-  const min = FENCE + 96
-  const max = world.size - min
-  let penalty = 0
-  if (x < min) penalty += (min - x) * 4
-  if (x > max) penalty += (x - max) * 4
-  if (y < min) penalty += (min - y) * 4
-  if (y > max) penalty += (y - max) * 4
-  return penalty
+  const spot = clampToArena(world.shape, world.width, world.height, x, y, FENCE + 96)
+  return Math.hypot(spot.x - x, spot.y - y) * 4
 }
 
 function collideFence(world: World, goat: Goat, hooks: SimHooks): void {
-  const min = FENCE + goat.radius
-  const max = world.size - FENCE - goat.radius
-  let hitX = false
-  let hitY = false
+  let hit = false
   let impact = 0
-  if (goat.x < min) {
-    impact = Math.max(impact, Math.abs(goat.vx))
-    goat.x = min
-    goat.vx = Math.abs(goat.vx)
-    hitX = true
-  } else if (goat.x > max) {
-    impact = Math.max(impact, Math.abs(goat.vx))
-    goat.x = max
-    goat.vx = -Math.abs(goat.vx)
-    hitX = true
-  }
-  if (goat.y < min) {
-    impact = Math.max(impact, Math.abs(goat.vy))
-    goat.y = min
-    goat.vy = Math.abs(goat.vy)
-    hitY = true
-  } else if (goat.y > max) {
-    impact = Math.max(impact, Math.abs(goat.vy))
-    goat.y = max
-    goat.vy = -Math.abs(goat.vy)
-    hitY = true
+  if (roundShape(world.shape)) {
+    const bounced = bounceEllipse(world, goat)
+    hit = bounced.hit
+    impact = bounced.impact
+  } else {
+    const minX = FENCE + goat.radius
+    const maxX = world.width - FENCE - goat.radius
+    const minY = FENCE + goat.radius
+    const maxY = world.height - FENCE - goat.radius
+    let hitX = false
+    let hitY = false
+    if (goat.x < minX) {
+      impact = Math.max(impact, Math.abs(goat.vx))
+      goat.x = minX
+      goat.vx = Math.abs(goat.vx)
+      hitX = true
+    } else if (goat.x > maxX) {
+      impact = Math.max(impact, Math.abs(goat.vx))
+      goat.x = maxX
+      goat.vx = -Math.abs(goat.vx)
+      hitX = true
+    }
+    if (goat.y < minY) {
+      impact = Math.max(impact, Math.abs(goat.vy))
+      goat.y = minY
+      goat.vy = Math.abs(goat.vy)
+      hitY = true
+    } else if (goat.y > maxY) {
+      impact = Math.max(impact, Math.abs(goat.vy))
+      goat.y = maxY
+      goat.vy = -Math.abs(goat.vy)
+      hitY = true
+    }
+    if (hitX || hitY) {
+      hit = true
+      const soft = !world.overtime && impact < 70
+      const rest = soft ? 0 : world.overtime ? FENCE_RESTITUTION_OT : FENCE_RESTITUTION
+      if (hitX) goat.vx *= rest
+      if (hitY) goat.vy *= rest
+    }
   }
 
-  if (hitX || hitY) {
-    const soft = !world.overtime && impact < 70
-    const rest = soft ? 0 : world.overtime ? FENCE_RESTITUTION_OT : FENCE_RESTITUTION
-    if (hitX) goat.vx *= rest
-    if (hitY) goat.vy *= rest
+  if (hit) {
     if (impact > 90) {
       const mag = Math.min(16, impact / 90)
       if (!world.reduce) world.shake = Math.max(world.shake, mag)
@@ -875,10 +916,44 @@ function collideFence(world: World, goat: Goat, hooks: SimHooks): void {
   if (goat.charging && goat.team === 'player') goat.charging = false
 }
 
+function bounceEllipse(world: World, goat: Goat): { hit: boolean; impact: number } {
+  const pad = FENCE + goat.radius
+  const rx = Math.max(12, world.width / 2 - pad)
+  const ry = Math.max(12, world.height / 2 - pad)
+  const px = goat.x - world.width / 2
+  const py = goat.y - world.height / 2
+  const n = (px * px) / (rx * rx) + (py * py) / (ry * ry)
+  if (n <= 1) return { hit: false, impact: 0 }
+  const s = 1 / Math.sqrt(n)
+  const bx = px * s
+  const by = py * s
+  goat.x = world.width / 2 + bx
+  goat.y = world.height / 2 + by
+  const gx = bx / (rx * rx)
+  const gy = by / (ry * ry)
+  const glen = Math.hypot(gx, gy) || 1
+  const nx = gx / glen
+  const ny = gy / glen
+  const into = goat.vx * nx + goat.vy * ny
+  if (into <= 0) return { hit: true, impact: 0 }
+  const soft = !world.overtime && into < 70
+  const rest = soft ? 0 : world.overtime ? FENCE_RESTITUTION_OT : FENCE_RESTITUTION
+  const bounce = (1 + rest) * into
+  goat.vx -= bounce * nx
+  goat.vy -= bounce * ny
+  return { hit: true, impact: into }
+}
+
 function againstFence(world: World, goat: Goat): boolean {
-  const min = FENCE + goat.radius + 1.25
-  const max = world.size - FENCE - goat.radius - 1.25
-  return goat.x <= min || goat.x >= max || goat.y <= min || goat.y >= max
+  const pad = FENCE + goat.radius + 1.25
+  if (roundShape(world.shape)) {
+    const rx = Math.max(12, world.width / 2 - pad)
+    const ry = Math.max(12, world.height / 2 - pad)
+    const px = (goat.x - world.width / 2) / rx
+    const py = (goat.y - world.height / 2) / ry
+    return px * px + py * py >= 0.992
+  }
+  return goat.x <= pad || goat.x >= world.width - pad || goat.y <= pad || goat.y >= world.height - pad
 }
 
 function collideHazards(world: World, goat: Goat, hooks: SimHooks): void {
@@ -1142,28 +1217,30 @@ function burst(
 
 function spawnFlame(world: World): void {
   const a = FENCE
-  const b = world.size - FENCE
+  const b = world.width - FENCE
+  const bottom = world.height - FENCE
   const edge = (Math.random() * 4) | 0
-  const t = a + Math.random() * (b - a)
-  let x = t
+  const tx = a + Math.random() * (b - a)
+  const ty = a + Math.random() * (bottom - a)
+  let x = tx
   let y = a
   let vx = (Math.random() - 0.5) * 16
   let vy = (Math.random() - 0.5) * 16
   if (edge === 0) {
-    x = t
+    x = tx
     y = a
     vy -= 36 + Math.random() * 46
   } else if (edge === 1) {
-    x = t
-    y = b
+    x = tx
+    y = bottom
     vy += 36 + Math.random() * 46
   } else if (edge === 2) {
     x = a
-    y = t
+    y = ty
     vx -= 36 + Math.random() * 46
   } else {
     x = b
-    y = t
+    y = ty
     vx += 36 + Math.random() * 46
   }
   const life = 0.32 + Math.random() * 0.45

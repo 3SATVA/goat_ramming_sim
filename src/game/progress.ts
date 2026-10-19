@@ -1,5 +1,6 @@
 import { FENCE } from './constants'
-import type { ArenaEvent, BossKind, Difficulty, Hazard, Role, Theme } from './types'
+import { insideArena } from './arena'
+import type { ArenaEvent, ArenaShape, BossKind, Difficulty, Hazard, Role, SpawnStats, Theme } from './types'
 import { clamp, colorDist } from './util'
 
 export type StatId = 'power' | 'hp' | 'weight' | 'speed' | 'fire'
@@ -51,6 +52,7 @@ export interface FightSlot {
   color: string
   role: Exclude<Role, 'player'>
   boss: BossKind | null
+  stats: SpawnStats
 }
 
 /** One fight inside a chapter. Add fields here; do not special-case the level number. */
@@ -98,6 +100,9 @@ export interface FightPlan {
   minutes: 2 | 3
   event: ArenaEvent
   theme: Theme
+  shape: ArenaShape
+  width: number
+  height: number
   size: number
   windAngle: number
   slots: FightSlot[]
@@ -345,12 +350,113 @@ export function roleProfile(role: Exclude<Role, 'player'>, boss: BossKind | null
   speed: number
   damage: number
 } {
-  if (boss === 'yard') return { radius: 58, hp: 150, mass: 1.7, speed: 0.84, damage: 3 }
-  if (boss === 'frost') return { radius: 60, hp: 165, mass: 1.65, speed: 0.8, damage: 2.8 }
-  if (boss === 'dune') return { radius: 60, hp: 175, mass: 1.75, speed: 0.82, damage: 3.1 }
-  if (role === 'grunt') return { radius: 32, hp: 48, mass: 0.66, speed: 0.84, damage: 0.58 }
-  if (role === 'boss') return { radius: 58, hp: 150, mass: 1.7, speed: 0.84, damage: 2.8 }
-  return { radius: 40, hp: 72, mass: 1, speed: 0.92, damage: 0.82 }
+  if (boss === 'yard') return { radius: 58, hp: 200, mass: 2.05, speed: 0.9, damage: 3.5 }
+  if (boss === 'frost') return { radius: 60, hp: 230, mass: 2.1, speed: 0.88, damage: 3.4 }
+  if (boss === 'dune') return { radius: 60, hp: 250, mass: 2.2, speed: 0.9, damage: 3.7 }
+  if (role === 'grunt') return { radius: 32, hp: 48, mass: 0.72, speed: 0.96, damage: 2 }
+  if (role === 'boss') return { radius: 58, hp: 200, mass: 2.05, speed: 0.9, damage: 3.4 }
+  return { radius: 40, hp: 76, mass: 1.05, speed: 1, damage: 2.25 }
+}
+
+/**
+ * Campaign growth per full trip from the first level to the last.
+ * Appending a chapter stretches this ramp; nothing else has to change.
+ */
+const STORY_GROWTH: Record<'mob' | 'boss', Growth> = {
+  mob: { hp: 0.9, damage: 0.5, mass: 0.42, speed: 0.16 },
+  boss: { hp: 0.35, damage: 0.38, mass: 0.32, speed: 0.28 },
+}
+
+/** How hard a maxed build is answered. Early levels use only a slice of this. */
+const UPGRADE_GROWTH: Record<'mob' | 'boss', Growth> = {
+  mob: { hp: 0.8, damage: 0.6, mass: 0.5, speed: 0.14 },
+  boss: { hp: 0.55, damage: 0.85, mass: 0.55, speed: 0.22 },
+}
+
+const QUICK_PAR: Record<'grunt' | 'rival', Growth> = {
+  grunt: { hp: 78, damage: 2.05, mass: 0.84, speed: 0.98 },
+  rival: { hp: 106, damage: 2.35, mass: 1.06, speed: 1.04 },
+}
+
+/** A maxed player is about this much tougher than a fresh one. Quick fights grow to match. */
+const QUICK_ANSWER: Growth = { hp: 0.95, damage: 0.72, mass: 0.68, speed: 0.2 }
+
+const QUICK_ARENAS: { shape: ArenaShape; width: number; height: number }[] = [
+  { shape: 'square', width: 860, height: 860 },
+  { shape: 'square', width: 1120, height: 1120 },
+  { shape: 'rectangle', width: 1480, height: 960 },
+  { shape: 'rectangle', width: 2100, height: 1320 },
+  { shape: 'circle', width: 1080, height: 1080 },
+  { shape: 'circle', width: 1880, height: 1880 },
+  { shape: 'oval', width: 1760, height: 1120 },
+  { shape: 'oval', width: 2200, height: 1360 },
+]
+
+interface Growth {
+  hp: number
+  damage: number
+  mass: number
+  speed: number
+}
+
+/** 0 with a fresh goat, 1 when every upgrade is maxed. Combat ranks count more than fire. */
+export function playerRating(upgrades: Upgrades): number {
+  const part = (id: StatId, weight: number) => {
+    const stat = STATS.find((entry) => entry.id === id)
+    return clamp(upgrades[id] / (stat?.max ?? 1), 0, 1) * weight
+  }
+  return clamp(part('power', 0.36) + part('hp', 0.28) + part('weight', 0.2) + part('speed', 0.12) + part('fire', 0.04), 0, 1)
+}
+
+/** 0 on the first story level, 1 on the last. New chapters extend the scale automatically. */
+export function campaignProgress(levelId: number): number {
+  const total = allLevels().length
+  if (total <= 1) return 0
+  return clamp((levelId - 1) / (total - 1), 0, 1)
+}
+
+function scaleStats(base: SpawnStats, kind: 'mob' | 'boss', progress: number, rating: number, answer: number): SpawnStats {
+  const level = STORY_GROWTH[kind]
+  const built = UPGRADE_GROWTH[kind]
+  const grow = (value: number, byLevel: number, byBuild: number) => value * (1 + progress * byLevel) * (1 + rating * answer * byBuild)
+  return {
+    radius: base.radius,
+    hp: Math.max(1, Math.round(grow(base.hp, level.hp, built.hp))),
+    damage: round2(grow(base.damage, level.damage, built.damage)),
+    mass: round2(grow(base.mass, level.mass, built.mass)),
+    speed: round2(grow(base.speed, level.speed, built.speed)),
+  }
+}
+
+function quickStats(role: 'grunt' | 'rival', rating: number, rng: () => number): SpawnStats {
+  const par = QUICK_PAR[role]
+  const spread = 0.92 + rng() * 0.16
+  const pace = 0.96 + rng() * 0.08
+  const grow = (value: number, byBuild: number) => value * (1 + rating * byBuild)
+  return {
+    radius: roleProfile(role, null).radius,
+    hp: Math.max(1, Math.round(grow(par.hp, QUICK_ANSWER.hp) * spread)),
+    damage: round2(grow(par.damage, QUICK_ANSWER.damage) * spread),
+    mass: round2(grow(par.mass, QUICK_ANSWER.mass) * spread),
+    speed: round2(grow(par.speed, QUICK_ANSWER.speed) * pace),
+  }
+}
+
+/** More goats share one budget, so four bodies are not four full-strength goats. */
+function applyPack(slots: FightSlot[]): void {
+  const count = Math.max(1, slots.length)
+  const hp = 1 / Math.pow(count, 0.55)
+  const damage = 1 / Math.pow(count, 0.95)
+  const mass = 1 / Math.pow(count, 0.28)
+  for (const slot of slots) {
+    slot.stats.hp = Math.max(30, Math.round(slot.stats.hp * hp))
+    slot.stats.damage = round2(slot.stats.damage * damage)
+    slot.stats.mass = round2(Math.max(0.55, slot.stats.mass * mass))
+  }
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100
 }
 
 export function eventCopy(event: ArenaEvent): { title: string; detail: string } {
@@ -372,12 +478,21 @@ export function buildStory(levelId: number, progress: Progress): FightPlan {
   const level = levels[clamp(levelId, 1, levels.length) - 1] ?? levels[0]
   if (!level) throw new Error('Story is empty')
   const first = level.id > progress.cleared
-  const slots = level.slots.map((slot) => ({
-    name: slot.name,
-    color: slot.color,
-    role: slot.role,
-    boss: slot.boss ?? null,
-  }))
+  const progressT = campaignProgress(level.id)
+  const rating = playerRating(progress.upgrades)
+  const answer = 0.08 + 0.92 * progressT
+  const slots = level.slots.map((slot) => {
+    const boss = slot.boss ?? null
+    const role = slot.role
+    return {
+      name: slot.name,
+      color: slot.color,
+      role,
+      boss,
+      stats: scaleStats(roleProfile(role, boss), role === 'boss' || boss ? 'boss' : 'mob', progressT, rating, answer),
+    }
+  })
+  const bossFight = slots.some((slot) => slot.role === 'boss')
   return {
     fight: 'story',
     round: level.id,
@@ -386,11 +501,14 @@ export function buildStory(levelId: number, progress: Progress): FightPlan {
     minutes: level.minutes,
     event: level.event,
     theme: level.theme,
+    shape: 'square',
+    width: level.size,
+    height: level.size,
     size: level.size,
     windAngle: level.theme === 'desert' ? 0.15 : level.theme === 'ice' ? -0.8 : 0.4,
     slots,
     hazards: placeHazards(level),
-    diff: curve(slots.length, level.windup, level.cooldown, level.lead, level.speed, 0.1, 0.14),
+    diff: storyDiff(level, slots.length, progressT, rating, answer, bossFight),
     coins: storyReward(level, first),
   }
 }
@@ -416,26 +534,61 @@ export function buildQuick(
     if (slots.length >= 2 && options.includes('grunt') && rng() < 0.75) role = 'grunt'
     const cost = role === 'rival' ? 1.05 : 0.68
     const name = names.pop() ?? `Goat ${slots.length + 1}`
-    slots.push({ name, color: coatFor(playerColor, slots.map((slot) => slot.color), rng), role, boss: null })
+    slots.push({
+      name,
+      color: coatFor(playerColor, slots.map((slot) => slot.color), rng),
+      role,
+      boss: null,
+      stats: quickStats(role === 'rival' ? 'rival' : 'grunt', playerRating(progress.upgrades), rng),
+    })
     spent += cost
   }
-  if (slots.length === 0) slots.push({ name: 'Kiddo', color: coatFor(playerColor, [], rng), role: 'grunt', boss: null })
-  const t = clamp(sum / 18, 0, 1)
-  const events: ArenaEvent[] = ['clear', 'rain', 'wind', 'mud', 'fog']
-  const event = events[Math.floor(rng() * events.length)] ?? 'clear'
+  if (slots.length === 0) {
+    slots.push({
+      name: 'Kiddo',
+      color: coatFor(playerColor, [], rng),
+      role: 'grunt',
+      boss: null,
+      stats: quickStats('grunt', playerRating(progress.upgrades), rng),
+    })
+  }
+  applyPack(slots)
+  const rating = playerRating(progress.upgrades)
+  const arena = QUICK_ARENAS[Math.floor(rng() * QUICK_ARENAS.length)] ?? QUICK_ARENAS[0]
+  if (!arena) throw new Error('Quick arenas are empty')
+  const grounds: { theme: Theme; event: ArenaEvent; name: string }[] = [
+    { theme: 'yard', event: (['clear', 'rain', 'wind', 'mud', 'fog'] as ArenaEvent[])[Math.floor(rng() * 5)] ?? 'clear', name: 'The Yard' },
+    { theme: 'ice', event: 'snowstorm', name: 'Icebound' },
+    { theme: 'desert', event: 'sandstorm', name: 'The Dunes' },
+  ]
+  const ground = grounds[Math.floor(rng() * grounds.length)] ?? grounds[0]
+  if (!ground) throw new Error('Quick grounds are empty')
   return {
     fight: 'quick',
     round: 1,
     name: 'Quick Fight',
-    chapterName: 'The Yard',
+    chapterName: ground.name,
     minutes,
-    event,
-    theme: 'yard',
-    size: 800,
-    windAngle: rng() * Math.PI * 2,
+    event: ground.event,
+    theme: ground.theme,
+    shape: arena.shape,
+    width: arena.width,
+    height: arena.height,
+    size: Math.max(arena.width, arena.height),
+    windAngle: ground.theme === 'desert' ? 0.15 : ground.theme === 'ice' ? -0.8 : rng() * Math.PI * 2,
     slots,
-    hazards: [],
-    diff: curve(slots.length, 0.82 - t * 0.24, 2.5 - t * 0.4, 0.26 + t * 0.14, 0.84 + t * 0.1, 0.1, 0.14),
+    hazards: quickHazards(arena.shape, arena.width, arena.height, ground.theme, rng),
+    diff: curve(
+      slots.length,
+      Math.max(0.4, 0.58 - rating * 0.16),
+      Math.max(0.5, 1.05 - rating * 0.4),
+      0.26 + rating * 0.12,
+      0.92 + rating * 0.1,
+      0.1 + rating * 0.16,
+      0.08,
+      0.22,
+      4.6 + rating * 2,
+    ),
     coins: 8 + slots.length * 6 + Math.round(sum * 0.35),
   }
 }
@@ -446,6 +599,29 @@ function storyReward(level: StoryLevel, firstClear: boolean): number {
   return firstClear ? base : Math.max(5, Math.round(base * 0.4))
 }
 
+function storyDiff(
+  level: StoryLevel,
+  count: number,
+  progressT: number,
+  rating: number,
+  answer: number,
+  boss: boolean,
+): Difficulty {
+  const answered = rating * answer
+  const windup = boss
+    ? Math.max(0.5, level.windup * (1 - progressT * 0.1 - answered * 0.05))
+    : Math.max(0.4, level.windup * (1 - progressT * 0.08 - rating * 0.34))
+  const cool = boss
+    ? Math.max(0.7, level.cooldown * 0.5 * (1 - progressT * 0.14 - answered * 0.08) * 0.64)
+    : Math.max(0.5, level.cooldown * 0.46 * (1 - progressT * 0.1 - rating * 0.32))
+  const lead = level.lead + progressT * 0.08 + answered * 0.05
+  const speed = level.speed * (1 + progressT * 0.08 + answered * 0.06)
+  const dodge = clamp(0.1 + progressT * 0.22 + answered * 0.16 + (boss ? 0.32 : 0), 0.08, 0.84)
+  const recover = boss ? Math.max(0.16, 0.3 - progressT * 0.08 - answered * 0.04) : 0.32
+  const aimTrack = 4.2 + progressT * 2.4 + answered * 1.6 + (boss ? 1.4 : 0)
+  return curve(count, windup, cool, lead, speed, dodge, 0.16 + progressT * 0.08, recover, aimTrack)
+}
+
 function curve(
   count: number,
   windup: number,
@@ -454,21 +630,51 @@ function curve(
   speed: number,
   dodge: number,
   bounce: number,
+  recover = 0.32,
+  aimTrack = 4.4,
 ): Difficulty {
-  const multi = count >= 4 ? 1.2 : count >= 3 ? 1.1 : 1
+  const multi = count >= 4 ? 1.55 : count >= 3 ? 1.25 : 1
   return {
     count,
     windup,
-    recover: 0.32,
+    recover,
     cooldown: cooldown * multi,
     speed,
     hp: 0,
-    aggro: 1400,
-    aimTrack: 4.4,
+    aggro: 4600,
+    aimTrack,
     lead,
     bounce,
     dodge,
   }
+}
+
+function quickHazards(shape: ArenaShape, width: number, height: number, theme: Theme, rng: () => number): Hazard[] {
+  const area = width * height
+  const rocks = clamp(Math.round(area / 420000), 1, 8)
+  const spikes = clamp(Math.round(area / 540000), 1, 7)
+  const dunes = theme === 'desert' ? clamp(Math.round(area / 720000), 1, 5) : 0
+  const hazards: Hazard[] = []
+  const drop = (kind: Hazard['kind'], r: number, count: number) => {
+    for (let i = 0; i < count; i++) {
+      let placed = false
+      for (let attempt = 0; attempt < 24; attempt++) {
+        const x = FENCE + 70 + rng() * (width - FENCE * 2 - 140)
+        const y = FENCE + 90 + rng() * (height - FENCE * 2 - 180)
+        if (!insideArena(shape, width, height, x, y, FENCE + r + 24)) continue
+        const crowded = hazards.some((hazard) => Math.hypot(hazard.x - x, hazard.y - y) < hazard.r + r + 36)
+        if (crowded) continue
+        hazards.push({ kind, x, y, r, life: -1 })
+        placed = true
+        break
+      }
+      if (!placed) hazards.push({ kind, x: width / 2, y: height / 2, r, life: -1 })
+    }
+  }
+  drop('rock', 36, rocks)
+  drop('spike', 42, spikes)
+  drop('dune', 72, dunes)
+  return hazards
 }
 
 function placeHazards(level: ChapterLevel): Hazard[] {

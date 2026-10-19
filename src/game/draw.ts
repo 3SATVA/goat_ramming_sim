@@ -1,4 +1,5 @@
-import { FENCE } from './constants'
+import { roundShape } from './arena'
+import { FENCE, HUD_BAND } from './constants'
 import { eventCopy } from './progress'
 import type { Goat, Hazard, Particle, Theme, World } from './types'
 import { mixHex, mulberry32, roundRect, shade } from './util'
@@ -17,7 +18,7 @@ export function drawWorld(
   time: number,
   pull: { origin: { x: number; y: number }; current: { x: number; y: number } } | null,
 ): void {
-  const field = getField(world.theme, world.size)
+  const field = getField(world.theme, world.width, world.height)
   ctx.drawImage(field, 0, 0)
   for (const hazard of world.hazards) {
     if (hazard.kind === 'dune') drawDune(ctx, hazard)
@@ -42,8 +43,7 @@ export function drawWorld(
   }
   drawFence(
     ctx,
-    world.size,
-    world.theme,
+    world,
     time,
     world.overtime && (world.mode === 'playing' || world.mode === 'paused' || world.mode === 'countdown'),
   )
@@ -110,6 +110,8 @@ export function drawOverlay(
     }
   }
 
+  drawOffscreen(ctx, world, cam, viewW, viewH)
+
   for (const floater of world.floaters) {
     const sx = cam.x + floater.x * cam.s
     const sy = cam.y + floater.y * cam.s
@@ -166,6 +168,9 @@ export function drawOverlay(
     ctx.textBaseline = 'bottom'
     ctx.fillStyle = '#ffcf70'
     ctx.fillText(boss.name, x, y - 2)
+    ctx.textAlign = 'right'
+    ctx.fillStyle = '#fff6e8'
+    ctx.fillText(String(Math.max(0, Math.ceil(boss.hp))), x + w, y - 2)
     ctx.fillStyle = '#2a2118'
     roundRect(ctx, x, y, w, h, 6)
     ctx.fill()
@@ -638,32 +643,47 @@ function drawPullTether(
   ctx.restore()
 }
 
-function drawFence(ctx: CanvasRenderingContext2D, size: number, theme: Theme, time: number, overtime: boolean): void {
-  const a = FENCE
-  const b = size - FENCE
-  ctx.save()
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.12)'
-  ctx.fillRect(a + 8, a + 10, b - a, b - a)
+function drawOffscreen(ctx: CanvasRenderingContext2D, world: World, cam: Camera, viewW: number, viewH: number): void {
+  if (world.mode !== 'playing' && world.mode !== 'countdown' && world.mode !== 'paused') return
+  const margin = 26
+  const top = HUD_BAND + 8
+  for (const goat of world.goats) {
+    if (goat.team !== 'enemy' || goat.dead) continue
+    const sx = cam.x + goat.x * cam.s
+    const sy = cam.y + goat.y * cam.s
+    if (sx > margin && sx < viewW - margin && sy > top && sy < viewH - margin) continue
+    const x = Math.min(viewW - margin, Math.max(margin, sx))
+    const y = Math.min(viewH - margin, Math.max(top, sy))
+    const ang = Math.atan2(sy - viewH / 2, sx - viewW / 2)
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(ang)
+    ctx.fillStyle = goat.color
+    ctx.strokeStyle = '#1a120c'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.moveTo(16, 0)
+    ctx.lineTo(-9, -9)
+    ctx.lineTo(-9, 9)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
+  }
+}
 
+function drawFence(ctx: CanvasRenderingContext2D, world: World, time: number, overtime: boolean): void {
+  const theme = world.theme
+  const calmRail = theme === 'ice' ? '#e7f6ff' : theme === 'desert' ? '#d7b07a' : '#f7f3ea'
+  const calmPost = theme === 'ice' ? '#f4fbff' : theme === 'desert' ? '#f0ddb0' : '#fffdf8'
+  const calmStroke = theme === 'ice' ? '#9ec4d8' : theme === 'desert' ? '#8a6238' : '#d7d0c4'
+  const rail = overtime ? `hsl(${26 + Math.sin(time * 21) * 12}, 100%, ${50 + Math.sin(time * 15) * 8}%)` : calmRail
+  ctx.save()
   if (overtime) {
     const flicker = 0.55 + Math.sin(time * 17) * 0.25
     ctx.shadowColor = `rgba(255, 110, 20, ${0.35 + flicker * 0.45})`
     ctx.shadowBlur = 18
   }
-
-  const calmRail = theme === 'ice' ? '#e7f6ff' : theme === 'desert' ? '#d7b07a' : '#f7f3ea'
-  const calmPost = theme === 'ice' ? '#f4fbff' : theme === 'desert' ? '#f0ddb0' : '#fffdf8'
-  const calmStroke = theme === 'ice' ? '#9ec4d8' : theme === 'desert' ? '#8a6238' : '#d7d0c4'
-  const rail = overtime ? `hsl(${26 + Math.sin(time * 21) * 12}, 100%, ${50 + Math.sin(time * 15) * 8}%)` : calmRail
-  const railLine = (inset: number, width: number) => {
-    ctx.strokeStyle = rail
-    ctx.lineWidth = width
-    ctx.lineJoin = 'round'
-    ctx.strokeRect(a + inset, a + inset, b - a - inset * 2, b - a - inset * 2)
-  }
-  railLine(0, overtime ? 9 : 8)
-  railLine(16, overtime ? 6 : 5)
-
   const post = (x: number, y: number) => {
     ctx.fillStyle = overtime ? '#ffe1a8' : calmPost
     ctx.strokeStyle = overtime ? '#c2410c' : calmStroke
@@ -673,14 +693,54 @@ function drawFence(ctx: CanvasRenderingContext2D, size: number, theme: Theme, ti
     ctx.fill()
     ctx.stroke()
   }
-  const steps = Math.max(8, Math.round(size / 110))
-  for (let i = 0; i <= steps; i++) {
-    const t = a + ((b - a) * i) / steps
-    post(t, a)
-    post(t, b)
-    if (i !== 0 && i !== steps) {
+  if (roundShape(world.shape)) {
+    const cx = world.width / 2
+    const cy = world.height / 2
+    const rx = world.width / 2 - FENCE
+    const ry = world.height / 2 - FENCE
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.12)'
+    ctx.beginPath()
+    ctx.ellipse(cx + 6, cy + 8, Math.max(8, rx - 10), Math.max(8, ry - 10), 0, 0, Math.PI * 2)
+    ctx.fill()
+    const ring = (inset: number, width: number) => {
+      ctx.strokeStyle = rail
+      ctx.lineWidth = width
+      ctx.beginPath()
+      ctx.ellipse(cx, cy, Math.max(8, rx - inset), Math.max(8, ry - inset), 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    ring(0, overtime ? 9 : 8)
+    ring(16, overtime ? 6 : 5)
+    const steps = Math.max(12, Math.round((rx + ry) / 70))
+    for (let i = 0; i < steps; i++) {
+      const t = (i / steps) * Math.PI * 2
+      post(cx + Math.cos(t) * rx, cy + Math.sin(t) * ry)
+    }
+  } else {
+    const a = FENCE
+    const right = world.width - FENCE
+    const bottom = world.height - FENCE
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.12)'
+    ctx.fillRect(a + 8, a + 10, right - a, bottom - a)
+    const railLine = (inset: number, width: number) => {
+      ctx.strokeStyle = rail
+      ctx.lineWidth = width
+      ctx.lineJoin = 'round'
+      ctx.strokeRect(a + inset, a + inset, right - a - inset * 2, bottom - a - inset * 2)
+    }
+    railLine(0, overtime ? 9 : 8)
+    railLine(16, overtime ? 6 : 5)
+    const xSteps = Math.max(4, Math.round(world.width / 140))
+    const ySteps = Math.max(4, Math.round(world.height / 140))
+    for (let i = 0; i <= xSteps; i++) {
+      const t = a + ((right - a) * i) / xSteps
+      post(t, a)
+      post(t, bottom)
+    }
+    for (let i = 1; i < ySteps; i++) {
+      const t = a + ((bottom - a) * i) / ySteps
       post(a, t)
-      post(b, t)
+      post(right, t)
     }
   }
   ctx.restore()
@@ -720,39 +780,39 @@ function drawParticle(ctx: CanvasRenderingContext2D, p: Particle): void {
   ctx.restore()
 }
 
-function getField(theme: Theme, size: number): HTMLCanvasElement {
-  const key = `${theme}:${size}`
+function getField(theme: Theme, w: number, h: number): HTMLCanvasElement {
+  const key = `${theme}:${w}x${h}`
   const cached = fieldCache.get(key)
   if (cached) return cached
   const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
+  canvas.width = w
+  canvas.height = h
   const ctx = canvas.getContext('2d')
   if (!ctx) return canvas
-  if (theme === 'ice') paintIce(ctx, size)
-  else if (theme === 'desert') paintDesert(ctx, size)
-  else paintYard(ctx, size)
+  if (theme === 'ice') paintIce(ctx, w, h)
+  else if (theme === 'desert') paintDesert(ctx, w, h)
+  else paintYard(ctx, w, h)
   fieldCache.set(key, canvas)
   return canvas
 }
 
-function paintYard(ctx: CanvasRenderingContext2D, size: number): void {
+function paintYard(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const rand = mulberry32(20260318)
   ctx.fillStyle = '#2c7e3a'
-  ctx.fillRect(0, 0, size, size)
-  for (let y = 0; y < size; y += 26) {
+  ctx.fillRect(0, 0, w, h)
+  for (let y = 0; y < h; y += 26) {
     ctx.fillStyle = y % 52 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.045)'
-    ctx.fillRect(0, y, size, 26)
+    ctx.fillRect(0, y, w, 26)
   }
   ctx.fillStyle = '#43a352'
-  ctx.fillRect(FENCE - 6, FENCE - 6, size - (FENCE - 6) * 2, size - (FENCE - 6) * 2)
+  ctx.fillRect(FENCE - 6, FENCE - 6, w - (FENCE - 6) * 2, h - (FENCE - 6) * 2)
 
   ctx.lineWidth = 1.6
   ctx.lineCap = 'round'
-  const blades = Math.round(900 * (size / 800) * (size / 800))
+  const blades = Math.round(900 * (w / 800) * (h / 800))
   for (let i = 0; i < blades; i++) {
-    const x = rand() * size
-    const y = rand() * size
+    const x = rand() * w
+    const y = rand() * h
     ctx.strokeStyle = rand() > 0.45 ? 'rgba(18, 70, 28, 0.28)' : 'rgba(255,255,255,0.16)'
     ctx.beginPath()
     ctx.moveTo(x, y)
@@ -760,69 +820,71 @@ function paintYard(ctx: CanvasRenderingContext2D, size: number): void {
     ctx.stroke()
   }
   const flowers = ['#fff6d8', '#ffd0e0', '#ffe566', '#ffffff', '#ffb6c8']
-  const blooms = Math.round(70 * (size / 800))
+  const blooms = Math.round(70 * Math.sqrt((w * h) / (800 * 800)))
   for (let i = 0; i < blooms; i++) {
-    const x = rand() * size
-    const y = rand() * size
+    const x = rand() * w
+    const y = rand() * h
     ctx.fillStyle = flowers[(rand() * flowers.length) | 0] ?? '#fff'
     ctx.beginPath()
     ctx.arc(x, y, 1.8 + rand() * 1.6, 0, Math.PI * 2)
     ctx.fill()
   }
-  const worn = ctx.createRadialGradient(size / 2, size / 2, 30, size / 2, size / 2, 260)
+  const worn = ctx.createRadialGradient(w / 2, h / 2, 30, w / 2, h / 2, 260)
   worn.addColorStop(0, 'rgba(122, 92, 48, 0.2)')
   worn.addColorStop(1, 'rgba(122, 92, 48, 0)')
   ctx.fillStyle = worn
   ctx.beginPath()
-  ctx.arc(size / 2, size / 2, 260, 0, Math.PI * 2)
+  ctx.arc(w / 2, h / 2, 260, 0, Math.PI * 2)
   ctx.fill()
 }
 
-function paintIce(ctx: CanvasRenderingContext2D, size: number): void {
+function paintIce(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const rand = mulberry32(71)
   ctx.fillStyle = '#c5dcea'
-  ctx.fillRect(0, 0, size, size)
-  for (let y = 0; y < size; y += 28) {
+  ctx.fillRect(0, 0, w, h)
+  for (let y = 0; y < h; y += 28) {
     ctx.fillStyle = y % 56 === 0 ? 'rgba(255,255,255,0.28)' : 'rgba(90, 130, 160, 0.08)'
-    ctx.fillRect(0, y, size, 28)
+    ctx.fillRect(0, y, w, 28)
   }
   ctx.fillStyle = '#e7f3fb'
-  ctx.fillRect(FENCE - 6, FENCE - 6, size - (FENCE - 6) * 2, size - (FENCE - 6) * 2)
-  for (let i = 0; i < 240; i++) {
+  ctx.fillRect(FENCE - 6, FENCE - 6, w - (FENCE - 6) * 2, h - (FENCE - 6) * 2)
+  const cracks = Math.round(240 * Math.sqrt((w * h) / (800 * 800)))
+  for (let i = 0; i < cracks; i++) {
     ctx.strokeStyle = 'rgba(255,255,255,0.45)'
     ctx.lineWidth = 1.2
-    const x = rand() * size
-    const y = rand() * size
+    const x = rand() * w
+    const y = rand() * h
     ctx.beginPath()
     ctx.moveTo(x, y)
     ctx.lineTo(x + 18 + rand() * 30, y + (rand() - 0.5) * 6)
     ctx.stroke()
   }
-  for (let i = 0; i < 160; i++) {
+  for (let i = 0; i < Math.round(cracks * 0.66); i++) {
     ctx.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.85)' : 'rgba(170, 206, 226, 0.7)'
     ctx.beginPath()
-    ctx.arc(rand() * size, rand() * size, 1.2 + rand() * 2.2, 0, Math.PI * 2)
+    ctx.arc(rand() * w, rand() * h, 1.2 + rand() * 2.2, 0, Math.PI * 2)
     ctx.fill()
   }
 }
 
-function paintDesert(ctx: CanvasRenderingContext2D, size: number): void {
+function paintDesert(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const rand = mulberry32(19)
   ctx.fillStyle = '#c4954e'
-  ctx.fillRect(0, 0, size, size)
+  ctx.fillRect(0, 0, w, h)
   ctx.fillStyle = '#e0b56a'
-  ctx.fillRect(FENCE - 6, FENCE - 6, size - (FENCE - 6) * 2, size - (FENCE - 6) * 2)
+  ctx.fillRect(FENCE - 6, FENCE - 6, w - (FENCE - 6) * 2, h - (FENCE - 6) * 2)
   ctx.fillStyle = 'rgba(168, 112, 52, 0.35)'
   for (let i = 0; i < 7; i++) {
-    const y = FENCE + 80 + ((size - FENCE * 2 - 120) * i) / 6
+    const y = FENCE + 80 + ((h - FENCE * 2 - 120) * i) / 6
     ctx.beginPath()
-    ctx.ellipse(size / 2, y, size * 0.42, 28, 0, 0, Math.PI * 2)
+    ctx.ellipse(w / 2, y, w * 0.42, 28, 0, 0, Math.PI * 2)
     ctx.fill()
   }
-  for (let i = 0; i < 90; i++) {
+  const specks = Math.round(90 * Math.sqrt((w * h) / (800 * 800)))
+  for (let i = 0; i < specks; i++) {
     ctx.fillStyle = rand() > 0.6 ? 'rgba(120, 72, 32, 0.35)' : 'rgba(255, 236, 190, 0.35)'
     ctx.beginPath()
-    ctx.arc(rand() * size, rand() * size, 1.4 + rand() * 2, 0, Math.PI * 2)
+    ctx.arc(rand() * w, rand() * h, 1.4 + rand() * 2, 0, Math.PI * 2)
     ctx.fill()
   }
 }
@@ -1013,21 +1075,22 @@ function drawVortexTell(ctx: CanvasRenderingContext2D, goat: Goat, time: number,
 }
 
 function drawWeather(ctx: CanvasRenderingContext2D, world: World, time: number): void {
-  const size = world.size
+  const w = world.width
+  const h = world.height
   if (world.event === 'rain' || world.event === 'fog' || world.event === 'snowstorm' || world.event === 'sandstorm' || world.event === 'wind') {
     ctx.save()
     if (world.event === 'fog') {
-      const g = ctx.createRadialGradient(size / 2, size / 2, size * 0.12, size / 2, size / 2, size * 0.62)
+      const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.12, w / 2, h / 2, Math.min(w, h) * 0.62)
       g.addColorStop(0, 'rgba(232, 236, 238, 0)')
       g.addColorStop(1, 'rgba(214, 220, 224, 0.72)')
       ctx.fillStyle = g
-      ctx.fillRect(0, 0, size, size)
+      ctx.fillRect(0, 0, w, h)
     } else if (world.event === 'snowstorm') {
       ctx.fillStyle = `rgba(245, 250, 255, ${0.34 + Math.sin(time * 1.4) * 0.06})`
-      ctx.fillRect(0, 0, size, size)
+      ctx.fillRect(0, 0, w, h)
     } else if (world.event === 'sandstorm') {
       ctx.fillStyle = 'rgba(168, 112, 48, 0.28)'
-      ctx.fillRect(0, 0, size, size)
+      ctx.fillRect(0, 0, w, h)
     }
     const streaks = world.event === 'snowstorm' ? 80 : world.event === 'sandstorm' ? 70 : world.event === 'rain' ? 60 : world.event === 'wind' ? 36 : 0
     const angle = world.event === 'snowstorm' || world.event === 'sandstorm' || world.event === 'wind' ? world.windAngle : Math.PI / 2 + 0.25
@@ -1041,8 +1104,8 @@ function drawWeather(ctx: CanvasRenderingContext2D, world: World, time: number):
             : 'rgba(255,255,255,0.28)'
     ctx.lineWidth = world.event === 'sandstorm' ? 3 : 2
     for (let i = 0; i < streaks; i++) {
-      const x = ((i * 97 + time * (world.event === 'snowstorm' ? 40 : 180)) % size)
-      const y = ((i * 53 + time * (world.event === 'rain' ? 320 : 90)) % size)
+      const x = ((i * 97 + time * (world.event === 'snowstorm' ? 40 : 180)) % w)
+      const y = ((i * 53 + time * (world.event === 'rain' ? 320 : 90)) % h)
       ctx.beginPath()
       ctx.moveTo(x, y)
       ctx.lineTo(x + Math.cos(angle) * (world.event === 'snowstorm' ? 10 : 22), y + Math.sin(angle) * (world.event === 'snowstorm' ? 10 : 22))
@@ -1053,7 +1116,7 @@ function drawWeather(ctx: CanvasRenderingContext2D, world: World, time: number):
   if (world.event === 'mud') {
     ctx.save()
     ctx.fillStyle = 'rgba(92, 64, 32, 0.18)'
-    ctx.fillRect(FENCE, FENCE, size - FENCE * 2, size - FENCE * 2)
+    ctx.fillRect(FENCE, FENCE, w - FENCE * 2, h - FENCE * 2)
     ctx.restore()
   }
 }

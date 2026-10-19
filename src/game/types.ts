@@ -6,6 +6,7 @@ export type Blow = 'ram' | 'fire' | 'time' | 'hazard'
 export type Role = 'player' | 'grunt' | 'rival' | 'boss'
 export type ArenaEvent = 'clear' | 'rain' | 'wind' | 'mud' | 'fog' | 'snowstorm' | 'sandstorm'
 export type Theme = 'yard' | 'ice' | 'desert'
+export type ArenaShape = 'square' | 'rectangle' | 'circle' | 'oval'
 export type BossKind = 'yard' | 'frost' | 'dune'
 export type BossTell = 'combo' | 'breath' | 'vortex'
 export type HazardKind = 'rock' | 'spike' | 'dune'
@@ -27,6 +28,16 @@ export interface Zone {
   life: number
   max: number
   tick: number
+  /** Chip damage for a vortex pulse. Ice patches leave this at 0. */
+  power: number
+}
+
+export interface SpawnStats {
+  radius: number
+  hp: number
+  mass: number
+  speed: number
+  damage: number
 }
 
 export interface Goat {
@@ -206,6 +217,10 @@ export interface World {
   speed: number
   fire: number
   theme: Theme
+  shape: ArenaShape
+  width: number
+  height: number
+  /** Longest side. Story pens stay square, so this matches width and height. */
   size: number
   chapterName: string
   hazards: Hazard[]
@@ -216,7 +231,13 @@ export interface World {
   gustAngle: number
   stormAcc: number
   stingAcc: number
-  lineup: { name: string; color: string; role: Exclude<Role, 'player'>; boss: BossKind | null }[]
+  lineup: {
+    name: string
+    color: string
+    role: Exclude<Role, 'player'>
+    boss: BossKind | null
+    stats: SpawnStats
+  }[]
 }
 
 export interface HudModel {
