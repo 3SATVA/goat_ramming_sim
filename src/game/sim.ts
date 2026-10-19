@@ -574,7 +574,7 @@ function beginAttack(world: World, goat: Goat, target: Goat, dist: number): void
   const plan = pickAttack(world, goat, target, power)
   const angle = plan === 'bounce' ? bankAngle(world, goat, target, power) : attackAngle(world, goat, target, power)
   const windup = power < 0.42 ? Math.max(0.44, diff.windup * 0.62) : diff.windup
-  goat.pendingGlide = 0
+  goat.pendingGlide = power > 0.7 ? 0.9 : power > 0.45 ? 0.35 : 0
   goat.pendingGust = 0
   goat.pendingCd = 0
   goat.tell = null

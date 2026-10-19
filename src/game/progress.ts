@@ -353,9 +353,9 @@ export function roleProfile(role: Exclude<Role, 'player'>, boss: BossKind | null
   if (boss === 'yard') return { radius: 58, hp: 200, mass: 2.05, speed: 0.9, damage: 3.5 }
   if (boss === 'frost') return { radius: 60, hp: 230, mass: 2.1, speed: 0.88, damage: 3.4 }
   if (boss === 'dune') return { radius: 60, hp: 250, mass: 2.2, speed: 0.9, damage: 3.7 }
-  if (role === 'grunt') return { radius: 32, hp: 48, mass: 0.72, speed: 0.96, damage: 1.12 }
+  if (role === 'grunt') return { radius: 32, hp: 48, mass: 0.72, speed: 0.96, damage: 2 }
   if (role === 'boss') return { radius: 58, hp: 200, mass: 2.05, speed: 0.9, damage: 3.4 }
-  return { radius: 40, hp: 76, mass: 1.05, speed: 1, damage: 1.28 }
+  return { radius: 40, hp: 76, mass: 1.05, speed: 1, damage: 2.25 }
 }
 
 /**
@@ -374,8 +374,8 @@ const UPGRADE_GROWTH: Record<'mob' | 'boss', Growth> = {
 }
 
 const QUICK_PAR: Record<'grunt' | 'rival', Growth> = {
-  grunt: { hp: 78, damage: 1.15, mass: 0.84, speed: 0.98 },
-  rival: { hp: 106, damage: 1.34, mass: 1.06, speed: 1.04 },
+  grunt: { hp: 78, damage: 2.05, mass: 0.84, speed: 0.98 },
+  rival: { hp: 106, damage: 2.35, mass: 1.06, speed: 1.04 },
 }
 
 /** A maxed player is about this much tougher than a fresh one. Quick fights grow to match. */
@@ -446,8 +446,8 @@ function quickStats(role: 'grunt' | 'rival', rating: number, rng: () => number):
 function applyPack(slots: FightSlot[]): void {
   const count = Math.max(1, slots.length)
   const hp = 1 / Math.pow(count, 0.55)
-  const damage = 1 / Math.pow(count, 0.32)
-  const mass = 1 / Math.pow(count, 0.22)
+  const damage = 1 / Math.pow(count, 0.95)
+  const mass = 1 / Math.pow(count, 0.28)
   for (const slot of slots) {
     slot.stats.hp = Math.max(30, Math.round(slot.stats.hp * hp))
     slot.stats.damage = round2(slot.stats.damage * damage)
@@ -580,13 +580,13 @@ export function buildQuick(
     hazards: quickHazards(arena.shape, arena.width, arena.height, ground.theme, rng),
     diff: curve(
       slots.length,
-      Math.max(0.48, 0.7 - rating * 0.12),
-      Math.max(0.85, 1.35 - rating * 0.28),
+      Math.max(0.4, 0.58 - rating * 0.16),
+      Math.max(0.5, 1.05 - rating * 0.4),
       0.26 + rating * 0.12,
       0.92 + rating * 0.1,
       0.1 + rating * 0.16,
       0.08,
-      0.26,
+      0.22,
       4.6 + rating * 2,
     ),
     coins: 8 + slots.length * 6 + Math.round(sum * 0.35),
@@ -608,8 +608,12 @@ function storyDiff(
   boss: boolean,
 ): Difficulty {
   const answered = rating * answer
-  const windup = Math.max(0.52, level.windup * (1 - progressT * 0.1 - answered * 0.05))
-  const cool = Math.max(0.8, level.cooldown * 0.55 * (1 - progressT * 0.14 - answered * 0.08) * (boss ? 0.64 : 1))
+  const windup = boss
+    ? Math.max(0.5, level.windup * (1 - progressT * 0.1 - answered * 0.05))
+    : Math.max(0.4, level.windup * (1 - progressT * 0.08 - rating * 0.34))
+  const cool = boss
+    ? Math.max(0.7, level.cooldown * 0.5 * (1 - progressT * 0.14 - answered * 0.08) * 0.64)
+    : Math.max(0.5, level.cooldown * 0.46 * (1 - progressT * 0.1 - rating * 0.32))
   const lead = level.lead + progressT * 0.08 + answered * 0.05
   const speed = level.speed * (1 + progressT * 0.08 + answered * 0.06)
   const dodge = clamp(0.1 + progressT * 0.22 + answered * 0.16 + (boss ? 0.32 : 0), 0.08, 0.84)
@@ -629,7 +633,7 @@ function curve(
   recover = 0.32,
   aimTrack = 4.4,
 ): Difficulty {
-  const multi = count >= 4 ? 1.2 : count >= 3 ? 1.1 : 1
+  const multi = count >= 4 ? 1.55 : count >= 3 ? 1.25 : 1
   return {
     count,
     windup,

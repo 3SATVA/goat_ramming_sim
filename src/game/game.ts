@@ -580,7 +580,8 @@ export class Game {
     const availH = Math.max(1, h - top)
     const fit = Math.min(availW / worldW, availH / worldH)
     const followScale = Math.min(availW / 900, availH / 760)
-    const scrolling = worldW * followScale > availW + 24 || worldH * followScale > availH + 24
+    const quickLarge = this.world.fight === 'quick' && (worldW > 1000 || worldH > 1000)
+    const scrolling = quickLarge && (worldW * followScale > availW + 24 || worldH * followScale > availH + 24)
     const s = Math.max(0.01, scrolling ? followScale : fit)
     const player = getPlayer(this.world)
     const focusX = player ? w / 2 - player.x * s : (availW - worldW * s) / 2
