@@ -1,6 +1,6 @@
 import type { Team } from './types'
 
-type ThrottleKey = 'thud' | 'bleat' | 'burn' | 'crackle' | 'ko'
+type ThrottleKey = 'thud' | 'bleat' | 'burn' | 'crackle' | 'ko' | 'snow' | 'sand'
 
 /**
  * Tiny synthesized kit: bleats, body thuds, launch whooshes, and fire crackle.
@@ -11,7 +11,7 @@ export class AudioBus {
   private ctx: AudioContext | null = null
   private master: GainNode | null = null
   private noiseBuffer: AudioBuffer | null = null
-  private last: Record<ThrottleKey, number> = { thud: 0, bleat: 0, burn: 0, crackle: 0, ko: 0 }
+  private last: Record<ThrottleKey, number> = { thud: 0, bleat: 0, burn: 0, crackle: 0, ko: 0, snow: 0, sand: 0 }
 
   unlock(): void {
     const ctx = this.ensure()
@@ -91,6 +91,24 @@ export class AudioBus {
   crackle(): void {
     if (!this.can('crackle', 0.07)) return
     this.burstNoise(0.05 + Math.random() * 0.04, 900 + Math.random() * 1200, 0.8, 0.07 + Math.random() * 0.05)
+  }
+
+  /** High, airy whistle. Not the fire crackle. */
+  snow(): void {
+    if (!this.can('snow', 0.32)) return
+    const ctx = this.ensure()
+    const t = ctx.currentTime
+    this.tone(ctx, t, 1480 + Math.random() * 420, 0.22, 'sine', 0.045)
+    this.tone(ctx, t + 0.04, 2100 + Math.random() * 300, 0.16, 'triangle', 0.02)
+    this.burstNoise(0.28, 2800, 0.35, 0.035)
+  }
+
+  /** Low grit. A different noise band from snow and from fire. */
+  sand(): void {
+    if (!this.can('sand', 0.32)) return
+    const ctx = this.ensure()
+    this.tone(ctx, ctx.currentTime, 70 + Math.random() * 24, 0.28, 'sine', 0.08)
+    this.burstNoise(0.34, 160 + Math.random() * 40, 0.55, 0.16)
   }
 
   overtime(): void {

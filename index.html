@@ -36,26 +36,29 @@
             <canvas id="logoGoat" class="logo-goat" width="184" height="156" aria-hidden="true"></canvas>
             <p class="eyebrow">Top-down ram arena</p>
             <h1 id="title">Billy Bash</h1>
-            <p class="lede">You are a goat. Pull back, let go, and ram the others out of the yard.</p>
+            <p class="lede">Pull back, let go, and ram the other goats. Only the goat you hit takes the damage.</p>
+            <p class="coin-pill" id="menuCoins">0 coins</p>
             <div class="block">
-              <span class="label">Round length</span>
-              <div class="seg" role="group" aria-label="Round length">
+              <span class="label">Quick fight length</span>
+              <div class="seg" role="group" aria-label="Quick fight length">
                 <button id="min2" type="button" aria-pressed="false">2:00</button>
                 <button id="min3" type="button" aria-pressed="true">3:00</button>
               </div>
-              <p class="fine">At 0:45 the fence catches fire. Touch it and you burn.</p>
+              <p class="fine">Story levels set their own clock. At 0:45 the fence catches fire.</p>
             </div>
             <div class="stack">
-              <button id="btnPlay" class="btn" type="button">Enter the ring</button>
+              <button id="btnStory" class="btn" type="button">Story Mode</button>
+              <button id="btnQuick" class="btn" type="button">Quick Fight</button>
+              <button id="btnUpgrades" class="btn secondary" type="button">Upgrades</button>
               <button id="btnCustomize" class="btn secondary" type="button">Customize goat</button>
               <button id="btnMuteMenu" class="btn secondary" type="button">Sound on</button>
               <button id="btnDebugMenu" class="btn secondary" type="button" hidden>Debug: start near overtime</button>
             </div>
             <ol class="howto">
-              <li><strong>Pull from anywhere.</strong> Press the field and drag. You are the goat with the red collar.</li>
-              <li><strong>The drag is the ram.</strong> You launch opposite the pull. Further means harder.</li>
-              <li><strong>Release.</strong> Speed is damage and knockback. The arrow stays on your goat.</li>
-              <li><strong>Win the round</strong> by knocking out every rival, or by having more HP when time runs out.</li>
+              <li><strong>Story Mode</strong> opens levels in order. Each chapter ends on a big goat.</li>
+              <li><strong>Pull from anywhere.</strong> You are the goat with the red collar. Launch is opposite the drag.</li>
+              <li><strong>The rammer is safe.</strong> Only the goat being hit takes ram damage. Fire still burns whoever touches the fence.</li>
+              <li><strong>Coins</strong> from a win buy ram power, stamina, weight, launch, recharge, and fire resistance.</li>
             </ol>
           </div>
         </section>
@@ -72,6 +75,32 @@
             </label>
             <p id="saveNote" class="fine">Saved on this device.</p>
             <button id="btnBack" class="btn" type="button">Back to yard</button>
+          </div>
+        </section>
+
+        <section id="screenStory" class="screen" hidden>
+          <div class="panel tall">
+            <p class="eyebrow">Campaign</p>
+            <h2>Story Mode</h2>
+            <p class="lede">Clear a level to open the next. Each chapter ends with its own boss.</p>
+            <p class="coin-pill" id="storyCoins">0 coins</p>
+            <div id="storyList" class="level-list"></div>
+            <div class="stack">
+              <button id="btnStoryBack" class="btn secondary" type="button">Back</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="screenUpgrades" class="screen" hidden>
+          <div class="panel tall">
+            <p class="eyebrow">Purse</p>
+            <h2>Upgrades</h2>
+            <p class="lede">Spend coins from wins. The prices climb each time you buy.</p>
+            <p class="coin-pill" id="upgradeCoins">0 coins</p>
+            <div id="upgradeList" class="level-list"></div>
+            <div class="stack">
+              <button id="btnUpgradeBack" class="btn secondary" type="button">Back</button>
+            </div>
           </div>
         </section>
 

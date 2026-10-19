@@ -1,7 +1,8 @@
 import { AudioBus } from './game/audio'
-import { Game, nextRoundLabel } from './game/game'
+import { Game } from './game/game'
 import type { Snapshot } from './game/game'
-import { loadSettings, saveSettings, type Settings } from './game/storage'
+import { CHAPTERS, eventCopy, isUnlocked, STATS, statEffect, upgradeCost, type Progress } from './game/progress'
+import { loadProgress, loadSettings, saveProgress, saveSettings, type Settings } from './game/storage'
 import type { EndResult, HudModel, Mode } from './game/types'
 import { COAT_COLORS } from './game/types'
 import { formatTime, isHexColor } from './game/util'
@@ -14,6 +15,7 @@ declare global {
       snapshot: () => Snapshot
       screenGoats: () => { name: string; team: string; hp: number; x: number; y: number; r: number }[]
       debugRound: (round: number) => void
+      debugKnockout: () => void
     }
   }
 }
@@ -29,8 +31,15 @@ audio.setMuted(settings.muted)
 
 const screenMenu = must<HTMLElement>('#screenMenu')
 const screenCustom = must<HTMLElement>('#screenCustom')
+const screenStory = must<HTMLElement>('#screenStory')
+const screenUpgrades = must<HTMLElement>('#screenUpgrades')
 const screenPause = must<HTMLElement>('#screenPause')
 const screenEnd = must<HTMLElement>('#screenEnd')
+const storyList = must<HTMLElement>('#storyList')
+const upgradeList = must<HTMLElement>('#upgradeList')
+const menuCoins = must<HTMLElement>('#menuCoins')
+const storyCoins = must<HTMLElement>('#storyCoins')
+const upgradeCoins = must<HTMLElement>('#upgradeCoins')
 const hud = must<HTMLElement>('#hud')
 const roundLabel = must<HTMLElement>('#roundLabel')
 const timerLabel = must<HTMLElement>('#timerLabel')
@@ -59,8 +68,13 @@ const game = new Game({
   isMuted: () => settings.muted,
   onMode: showMode,
   onHud: showHud,
+  onProgress: (progress) => {
+    saveProgress(progress)
+    paintEconomy(progress)
+  },
 })
 game.applySettings(settings.color, settings.minutes)
+game.setProgress(loadProgress())
 colorPicker.value = settings.color
 syncMinutes()
 syncMuteLabels()
@@ -73,14 +87,31 @@ if (game.debugEnabled) {
     snapshot: () => game.snapshot(),
     screenGoats: () => game.screenGoats(),
     debugRound: (round: number) => game.debugRound(round),
+    debugKnockout: () => game.debugKnockout(),
   }
 }
 
 document.addEventListener('pointerdown', () => audio.unlock(), { passive: true })
 
-must<HTMLButtonElement>('#btnPlay').addEventListener('click', () => {
+must<HTMLButtonElement>('#btnStory').addEventListener('click', () => {
   tap()
-  game.playFromMenu()
+  game.openStory()
+})
+must<HTMLButtonElement>('#btnQuick').addEventListener('click', () => {
+  tap()
+  game.startQuick()
+})
+must<HTMLButtonElement>('#btnUpgrades').addEventListener('click', () => {
+  tap()
+  game.openUpgrades()
+})
+must<HTMLButtonElement>('#btnStoryBack').addEventListener('click', () => {
+  tap()
+  game.closePanels()
+})
+must<HTMLButtonElement>('#btnUpgradeBack').addEventListener('click', () => {
+  tap()
+  game.closePanels()
 })
 must<HTMLButtonElement>('#btnCustomize').addEventListener('click', () => {
   tap()
@@ -153,8 +184,13 @@ function showMode(mode: Mode, end: EndResult | null): void {
   app.dataset.mode = mode
   screenMenu.hidden = mode !== 'menu'
   screenCustom.hidden = mode !== 'customize'
+  screenStory.hidden = mode !== 'story'
+  screenUpgrades.hidden = mode !== 'upgrades'
   screenPause.hidden = mode !== 'paused'
   screenEnd.hidden = mode !== 'end'
+  paintEconomy(game.currentProgress())
+  if (mode === 'story') paintStory(game.currentProgress())
+  if (mode === 'upgrades') paintUpgrades(game.currentProgress())
   if (mode === 'end' && end) fillEnd(end)
 }
 
@@ -163,8 +199,8 @@ function showHud(model: HudModel): void {
   app.dataset.overtime = String(model.overtime)
   app.dataset.time = formatTime(model.timeLeft)
   app.dataset.hp = String(Math.ceil(model.playerHp))
-  const rivals = model.rivals === 1 ? '1 rival' : `${model.rivals} rivals`
-  roundLabel.textContent = `Round ${model.round} · ${rivals}`
+  const eventName = model.event === 'clear' ? '' : ` · ${eventCopy(model.event).title}`
+  roundLabel.textContent = `${model.title}${eventName}`
   timerLabel.textContent = model.overtime ? `${formatTime(model.timeLeft)} · FIRE` : formatTime(model.timeLeft)
   timerLabel.classList.toggle('overtime', model.overtime)
   const pct = model.playerMax > 0 ? Math.max(0, Math.min(1, model.playerHp / model.playerMax)) : 0
@@ -175,11 +211,12 @@ function showHud(model: HudModel): void {
 }
 
 function fillEnd(end: EndResult): void {
-  endRound.textContent = `Round ${end.round}`
+  endRound.textContent = end.fight === 'quick' ? 'Quick Fight' : `${end.chapterName} · ${end.round}. ${end.levelName}`
   const copy = endCopy(end)
   endTitle.textContent = copy.title
   endBody.textContent = copy.body
   const rows: [string, string][] = [
+    ['Coins earned', String(end.coins)],
     ['Rams launched', String(end.launches)],
     ['Rams landed', String(end.rams)],
     ['Damage dealt', String(end.damageDealt)],
@@ -199,14 +236,18 @@ function fillEnd(end: EndResult): void {
     }),
   )
   const won = end.result === 'win'
-  btnNext.hidden = !won
-  btnNext.textContent = nextRoundLabel(end.round)
-  btnRetry.textContent = won ? 'Replay round' : 'Try again'
+  const next = game.nextLabel()
+  btnNext.hidden = !won || !next
+  if (next) btnNext.textContent = next
+  btnRetry.textContent = won ? 'Replay' : 'Try again'
 }
 
 function endCopy(end: EndResult): { title: string; body: string } {
   if (end.result === 'win' && end.blow === 'fire') {
     return { title: "Yard's yours", body: 'The fire finished what you started.' }
+  }
+  if (end.result === 'win' && end.blow === 'hazard') {
+    return { title: "Yard's yours", body: 'The spikes and the storm finished the fight.' }
   }
   if (end.result === 'win' && end.reason === 'ko') {
     return { title: "Yard's yours", body: 'You flattened the other goats.' }
@@ -219,6 +260,9 @@ function endCopy(end: EndResult): { title: string; body: string } {
   }
   if (end.result === 'lose' && end.blow === 'fire') {
     return { title: 'Burned out', body: 'The fence caught you and would not let go.' }
+  }
+  if (end.result === 'lose' && end.blow === 'hazard') {
+    return { title: 'Caught out', body: 'Spikes or stinging sand took you down.' }
   }
   if (end.result === 'lose' && end.reason === 'ko') {
     return { title: 'Knocked out', body: 'The other goat got the last ram.' }
@@ -278,6 +322,71 @@ function syncMuteLabels(): void {
   btnMuteMenu.textContent = label
   btnMute.setAttribute('aria-pressed', String(!settings.muted))
   btnMuteMenu.setAttribute('aria-pressed', String(!settings.muted))
+}
+
+function paintEconomy(progress: Progress): void {
+  const label = progress.coins === 1 ? '1 coin' : `${progress.coins} coins`
+  menuCoins.textContent = label
+  storyCoins.textContent = label
+  upgradeCoins.textContent = label
+}
+
+function paintStory(progress: Progress): void {
+  storyList.replaceChildren()
+  let id = 1
+  for (const chapter of CHAPTERS) {
+    const heading = document.createElement('h3')
+    heading.className = 'chapter-label'
+    const name = document.createElement('strong')
+    name.textContent = `Chapter ${chapter.id} · ${chapter.name}`
+    const blurb = document.createElement('span')
+    blurb.textContent = chapter.blurb
+    heading.append(name, blurb)
+    storyList.append(heading)
+    for (const level of chapter.levels) {
+      const levelId = id++
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = level.slots.some((slot) => slot.role === 'boss') ? 'level-btn boss' : 'level-btn'
+      const open = isUnlocked(levelId, progress.cleared)
+      button.disabled = !open
+      const title = document.createElement('strong')
+      title.textContent = open ? `${levelId}. ${level.name}` : `${levelId}. Locked`
+      const detail = document.createElement('span')
+      const weather = eventCopy(level.event).title
+      detail.textContent = open ? `${level.blurb} ${level.minutes}:00 · ${weather}.` : 'Clear the previous level.'
+      button.append(title, detail)
+      button.addEventListener('click', () => {
+        if (!open) return
+        tap()
+        game.startStory(levelId)
+      })
+      storyList.append(button)
+    }
+  }
+}
+
+function paintUpgrades(progress: Progress): void {
+  upgradeList.replaceChildren()
+  for (const stat of STATS) {
+    const level = progress.upgrades[stat.id]
+    const maxed = level >= stat.max
+    const cost = upgradeCost(stat.id, level)
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'upgrade-row'
+    button.disabled = maxed || progress.coins < cost
+    const title = document.createElement('strong')
+    title.textContent = maxed ? `${stat.name} · Max` : `${stat.name} · ${cost} coins`
+    const detail = document.createElement('span')
+    detail.textContent = `${stat.blurb} Now ${statEffect(stat.id, level)}. Next ${statEffect(stat.id, Math.min(stat.max, level + 1))}.`
+    button.append(title, detail)
+    button.addEventListener('click', () => {
+      tap()
+      if (game.buy(stat.id)) paintUpgrades(game.currentProgress())
+    })
+    upgradeList.append(button)
+  }
 }
 
 function tap(): void {
