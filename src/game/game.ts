@@ -53,6 +53,8 @@ export interface Snapshot {
   coins: number
   cleared: number
   hazards: number
+  spikes: { x: number; y: number; r: number }[]
+  zones: { kind: string; x: number; y: number; r: number; life: number }[]
   goats: {
     name: string
     team: string
@@ -65,6 +67,9 @@ export interface Snapshot {
     ignite: number
     ai: string
     plan: string
+    tell: string | null
+    chill: number
+    damageMul: number
     dead: boolean
     charging: boolean
     chargePower: number
@@ -293,6 +298,7 @@ export class Game {
     this.world.size = 800
     this.world.event = 'clear'
     this.world.hazards = []
+    this.world.zones = []
     this.world.chapterName = 'The Yard'
     this.world.levelName = 'Yard'
     this.world.minutes = this.preferredMinutes
@@ -360,6 +366,16 @@ export class Game {
       coins: this.progress.coins,
       cleared: this.progress.cleared,
       hazards: this.world.hazards.length,
+      spikes: this.world.hazards
+        .filter((hazard) => hazard.kind === 'spike')
+        .map((hazard) => ({ x: Math.round(hazard.x), y: Math.round(hazard.y), r: hazard.r })),
+      zones: this.world.zones.map((zone) => ({
+        kind: zone.kind,
+        x: Math.round(zone.x),
+        y: Math.round(zone.y),
+        r: zone.r,
+        life: Math.round(zone.life * 10) / 10,
+      })),
       goats: this.world.goats.map((g) => ({
         name: g.name,
         team: g.team,
@@ -372,6 +388,9 @@ export class Game {
         ignite: Math.round(g.ignite * 10) / 10,
         ai: g.ai,
         plan: g.plan,
+        tell: g.tell,
+        chill: Math.round(g.chill * 10) / 10,
+        damageMul: g.damageMul,
         dead: g.dead,
         charging: g.charging,
         chargePower: Math.round(g.chargePower * 100) / 100,

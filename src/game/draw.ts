@@ -24,7 +24,6 @@ export function drawWorld(
   }
   for (const hazard of world.hazards) {
     if (hazard.kind === 'rock') drawRock(ctx, hazard)
-    if (hazard.kind === 'spike') drawSpike(ctx, hazard, world.theme)
   }
   const living = world.goats.filter((g) => !g.dead)
   const down = world.goats.filter((g) => g.dead)
@@ -34,6 +33,13 @@ export function drawWorld(
     drawGoat(ctx, goat, time, offsetFor(goat))
   }
   drawWeather(ctx, world, time)
+  for (const hazard of world.hazards) {
+    if (hazard.kind === 'spike') drawSpike(ctx, hazard, time)
+  }
+  drawZones(ctx, world, time)
+  for (const goat of living) {
+    if (goat.chill > 0) drawChill(ctx, goat)
+  }
   drawFence(
     ctx,
     world.size,
@@ -50,7 +56,16 @@ export function drawWorld(
     } else if (goat.team === 'enemy' && goat.ai === 'windup') {
       const p = 1 - goat.aiTimer / Math.max(0.001, goat.aiWindup)
       const alpha = 0.55 + Math.min(1, p) * 0.45
-      drawAim(ctx, goat.x, goat.y, goat.aimAngle, Math.max(0.18, p), telegraphColor(goat, alpha))
+      if (goat.tell === 'breath') drawBreathTell(ctx, goat, p)
+      else if (goat.tell === 'vortex') drawVortexTell(ctx, goat, time, p)
+      else if (goat.tell === 'combo') {
+        const color = telegraphColor(goat, alpha)
+        drawAim(ctx, goat.x, goat.y, goat.aimAngle - 0.34, Math.max(0.22, p * 0.82), color)
+        drawAim(ctx, goat.x, goat.y, goat.aimAngle, Math.max(0.28, p), color)
+        drawAim(ctx, goat.x, goat.y, goat.aimAngle + 0.34, Math.max(0.22, p * 0.82), color)
+      } else {
+        drawAim(ctx, goat.x, goat.y, goat.aimAngle, Math.max(0.18, p), telegraphColor(goat, alpha))
+      }
     }
     if (goat.team === 'player' && goat.cooldown > 0 && goat.cooldownMax > 0) drawCooldown(ctx, goat)
   }
@@ -90,7 +105,8 @@ export function drawOverlay(
     const sy = cam.y + (goat.y - goat.radius) * cam.s
     drawHealthBar(ctx, sx, sy, goat)
     if (goat.team === 'enemy' && goat.ai === 'windup' && !goat.dead) {
-      drawBang(ctx, sx, sy - 28, 1 - goat.aiTimer / Math.max(0.001, goat.aiWindup))
+      const label = goat.tell === 'combo' ? 'x3' : goat.tell === 'breath' ? 'ICE' : goat.tell === 'vortex' ? 'VORTEX' : '!'
+      drawBang(ctx, sx, sy - 28, 1 - goat.aiTimer / Math.max(0.001, goat.aiWindup), label)
     }
   }
 
@@ -554,19 +570,19 @@ function drawHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number, go
   ctx.fillText(label, sx, y - 1)
 }
 
-function drawBang(ctx: CanvasRenderingContext2D, x: number, y: number, p: number): void {
+function drawBang(ctx: CanvasRenderingContext2D, x: number, y: number, p: number, label = '!'): void {
   const s = 1 + Math.sin(p * 30) * 0.08
   ctx.save()
   ctx.translate(x, y)
   ctx.scale(s, s)
-  ctx.font = '800 22px Fredoka, "Trebuchet MS", sans-serif'
+  ctx.font = label.length > 2 ? '800 15px Fredoka, "Trebuchet MS", sans-serif' : '800 22px Fredoka, "Trebuchet MS", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.lineWidth = 4
-  ctx.strokeStyle = '#2a2118'
-  ctx.fillStyle = '#ffcf70'
-  ctx.strokeText('!', 0, 0)
-  ctx.fillText('!', 0, 0)
+  ctx.strokeStyle = '#1a120c'
+  ctx.fillStyle = label === 'ICE' ? '#d7f4ff' : '#ffe14a'
+  ctx.strokeText(label, 0, 0)
+  ctx.fillText(label, 0, 0)
   ctx.restore()
 }
 
@@ -845,36 +861,154 @@ function drawRock(ctx: CanvasRenderingContext2D, hazard: Hazard): void {
   ctx.restore()
 }
 
-function drawSpike(ctx: CanvasRenderingContext2D, hazard: Hazard, theme: Theme): void {
+function drawSpike(ctx: CanvasRenderingContext2D, hazard: Hazard, time: number): void {
   ctx.save()
   ctx.translate(hazard.x, hazard.y)
-  if (theme === 'desert') {
-    ctx.fillStyle = '#6f8f3a'
-    ctx.strokeStyle = '#2f4a18'
-    ctx.lineWidth = 2
-    for (const side of [-1, 1]) {
-      ctx.beginPath()
-      ctx.moveTo(0, 4)
-      ctx.lineTo(side * 16, -hazard.r)
-      ctx.lineTo(side * 5, 6)
-      ctx.closePath()
-      ctx.fill()
-      ctx.stroke()
-    }
-    ctx.fillStyle = '#d2b48c'
-    ctx.fillRect(-3, -2, 6, 10)
-  } else {
-    ctx.fillStyle = theme === 'ice' ? '#d7e7f2' : '#c5c8ce'
-    ctx.strokeStyle = '#2a2118'
-    ctx.lineWidth = 2
+  ctx.fillStyle = 'rgba(26, 18, 12, 0.38)'
+  ctx.beginPath()
+  ctx.ellipse(3, 12, 30, 11, 0, 0, Math.PI * 2)
+  ctx.fill()
+  const warn = 0.22 + Math.sin(time * 4 + hazard.x * 0.01) * 0.06
+  ctx.fillStyle = `rgba(255, 54, 42, ${warn})`
+  ctx.strokeStyle = 'rgba(255, 70, 48, 0.9)'
+  ctx.lineWidth = 2.5
+  ctx.beginPath()
+  ctx.ellipse(0, 8, 28, 12, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+  const blades = [
+    { x: -14, h: 30, w: 9 },
+    { x: 14, h: 28, w: 8 },
+    { x: 0, h: 44, w: 11 },
+  ]
+  const glint = 0.45 + Math.sin(time * 5 + hazard.y * 0.02) * 0.35
+  for (const blade of blades) {
+    ctx.fillStyle = 'rgba(26, 18, 12, 0.4)'
     ctx.beginPath()
-    ctx.moveTo(0, -hazard.r)
-    ctx.lineTo(8, 8)
-    ctx.lineTo(-8, 8)
+    ctx.moveTo(blade.x + 3, 10 - blade.h)
+    ctx.lineTo(blade.x + blade.w + 3, 12)
+    ctx.lineTo(blade.x - blade.w + 3, 12)
     ctx.closePath()
     ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(blade.x, 6 - blade.h)
+    ctx.lineTo(blade.x + blade.w, 8)
+    ctx.lineTo(blade.x - blade.w, 8)
+    ctx.closePath()
+    ctx.fillStyle = '#ffe14a'
+    ctx.fill()
+    ctx.lineWidth = 3.5
+    ctx.strokeStyle = '#1a120c'
+    ctx.lineJoin = 'round'
+    ctx.stroke()
+    ctx.strokeStyle = `rgba(255, 255, 255, ${glint})`
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(blade.x - 2, 2 - blade.h * 0.78)
+    ctx.lineTo(blade.x - 1, -blade.h * 0.42)
     ctx.stroke()
   }
+  ctx.restore()
+}
+
+function drawZones(ctx: CanvasRenderingContext2D, world: World, time: number): void {
+  for (const zone of world.zones) {
+    const fade = Math.max(0.15, Math.min(1, zone.life / Math.max(0.001, zone.max)))
+    ctx.save()
+    if (zone.kind === 'ice') {
+      ctx.fillStyle = `rgba(186, 232, 255, ${0.34 * fade})`
+      ctx.strokeStyle = `rgba(236, 252, 255, ${0.9 * fade})`
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.ellipse(zone.x, zone.y, zone.r, zone.r * 0.72, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * fade})`
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(zone.x - zone.r * 0.45, zone.y)
+      ctx.lineTo(zone.x + zone.r * 0.1, zone.y - zone.r * 0.18)
+      ctx.lineTo(zone.x + zone.r * 0.42, zone.y + zone.r * 0.08)
+      ctx.stroke()
+    } else {
+      ctx.translate(zone.x, zone.y)
+      ctx.rotate(time * 2.4)
+      ctx.fillStyle = `rgba(214, 146, 48, ${0.22 * fade})`
+      ctx.beginPath()
+      ctx.arc(0, 0, zone.r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = `rgba(255, 207, 70, ${0.9 * fade})`
+      ctx.lineWidth = 4
+      ctx.beginPath()
+      ctx.arc(0, 0, zone.r * 0.86, 0.3, Math.PI * 1.45)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(0, 0, zone.r * 0.48, 1.1, Math.PI * 2.1)
+      ctx.stroke()
+      ctx.fillStyle = `rgba(255, 225, 74, ${0.85 * fade})`
+      ctx.beginPath()
+      ctx.arc(0, 0, 7, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
+  }
+}
+
+function drawChill(ctx: CanvasRenderingContext2D, goat: Goat): void {
+  ctx.save()
+  ctx.translate(goat.x, goat.y)
+  ctx.strokeStyle = 'rgba(210, 244, 255, 0.95)'
+  ctx.lineWidth = 4
+  ctx.beginPath()
+  ctx.arc(0, 0, goat.radius + 14, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawBreathTell(ctx: CanvasRenderingContext2D, goat: Goat, p: number): void {
+  const reach = 90 + Math.max(0, Math.min(1, p)) * 290
+  const half = 0.62
+  ctx.save()
+  ctx.translate(goat.x, goat.y)
+  ctx.rotate(goat.aimAngle)
+  ctx.beginPath()
+  ctx.moveTo(18, 0)
+  ctx.arc(0, 0, reach, -half, half)
+  ctx.closePath()
+  ctx.fillStyle = `rgba(170, 230, 255, ${0.16 + p * 0.28})`
+  ctx.fill()
+  ctx.strokeStyle = `rgba(236, 252, 255, ${0.75 + p * 0.25})`
+  ctx.lineWidth = 4
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawVortexTell(ctx: CanvasRenderingContext2D, goat: Goat, time: number, p: number): void {
+  const pulse = 1 + Math.sin(time * 12) * 0.05
+  const r = (48 + Math.max(0, Math.min(1, p)) * 72) * pulse
+  ctx.save()
+  ctx.translate(goat.markX, goat.markY)
+  ctx.rotate(time * 3)
+  ctx.fillStyle = `rgba(255, 186, 48, ${0.16 + p * 0.22})`
+  ctx.strokeStyle = `rgba(255, 225, 74, ${0.85})`
+  ctx.lineWidth = 4
+  ctx.beginPath()
+  ctx.arc(0, 0, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(0, 0, r * 0.62, 0.4, Math.PI * 1.5)
+  ctx.stroke()
+  ctx.restore()
+  ctx.save()
+  ctx.font = '800 16px Fredoka, "Trebuchet MS", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+  ctx.lineWidth = 4
+  ctx.strokeStyle = '#1a120c'
+  ctx.fillStyle = '#ffe14a'
+  ctx.strokeText('VORTEX', goat.markX, goat.markY - r - 6)
+  ctx.fillText('VORTEX', goat.markX, goat.markY - r - 6)
   ctx.restore()
 }
 

@@ -7,7 +7,9 @@ export type Role = 'player' | 'grunt' | 'rival' | 'boss'
 export type ArenaEvent = 'clear' | 'rain' | 'wind' | 'mud' | 'fog' | 'snowstorm' | 'sandstorm'
 export type Theme = 'yard' | 'ice' | 'desert'
 export type BossKind = 'yard' | 'frost' | 'dune'
+export type BossTell = 'combo' | 'breath' | 'vortex'
 export type HazardKind = 'rock' | 'spike' | 'dune'
+export type ZoneKind = 'ice' | 'vortex'
 
 export interface Hazard {
   kind: HazardKind
@@ -15,6 +17,16 @@ export interface Hazard {
   y: number
   r: number
   life: number
+}
+
+export interface Zone {
+  kind: ZoneKind
+  x: number
+  y: number
+  r: number
+  life: number
+  max: number
+  tick: number
 }
 
 export interface Goat {
@@ -69,6 +81,13 @@ export interface Goat {
   pendingCd: number
   hazardCd: number
   bossStep: number
+  /** Special the current windup is showing. */
+  tell: BossTell | null
+  /** Locked aim point for a ground telegraph. */
+  markX: number
+  markY: number
+  /** Seconds of icy slow left. */
+  chill: number
 }
 
 export interface Particle {
@@ -190,6 +209,7 @@ export interface World {
   size: number
   chapterName: string
   hazards: Hazard[]
+  zones: Zone[]
   /** Seconds left on a boss-kicked gust. */
   gust: number
   gustBoost: number

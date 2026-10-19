@@ -19,9 +19,9 @@ Pause with the **Pause** button, **Esc**, or **P**. Leaving the tab also pauses.
 
 Chapters are a list in the game data. Each one names its field, its levels, and its hazards, so another chapter can be added by appending to that list.
 
-1. **The Yard** is the grassy field and the white fence. Later levels add boulders, then spikes. It ends with **Gnasher**, who alternates a long freight-train charge with a shorter shoulder ram.
-2. **Icebound** is snow and ice. Rams slide. A snowstorm whites out the pen, shoves everyone with gusts that change direction, and slows how fast rivals recover. It ends with **Frostbite**, whose glacier charge glides the length of the pen.
-3. **The Dunes** is sand, cactus, and drifts that drag at your hooves. A sandstorm pushes one way, stings anyone out in the open, and weakens a full pull. Rocks shelter you from the sting. It ends with **Duneking**, who jabs three times and then kicks up a personal gale.
+1. **The Yard** is the grassy field and the white fence. Later levels add boulders, then spike clusters. It ends with **Gnasher**, who opens with three rapid charges and finishes with a freight-train ram. Boss rams hit much harder than a rival's.
+2. **Icebound** is snow and ice. Rams slide. A snowstorm whites out the pen, shoves everyone with gusts that change direction, and slows how fast rivals recover. It ends with **Frostbite**, who breathes a freezing cone (an ice patch that slows whoever stands on it) and then rides a glacier charge.
+3. **The Dunes** is sand and drifts that drag at your hooves. Spike clusters stay bright on the sand. A sandstorm pushes one way, stings anyone out in the open, and weakens a full pull. Rocks shelter you from the sting. It ends with **Duneking**, who marks a sand vortex that pulls goats in, jabs, and then kicks up a personal gale.
 
 The pen gets bigger as the story goes. Quick Fight stays on the ordinary yard and its ordinary weather: clear, rain, wind, mud, or fog. It does not use chapter storms, spikes, rocks, or dunes.
 
