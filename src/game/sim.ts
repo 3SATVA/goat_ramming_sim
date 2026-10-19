@@ -265,9 +265,8 @@ export function launchGoat(
   if (goat.team === 'player') {
     world.stats.launches += 1
     world.hint = false
-    const snow = world.event === 'snowstorm' ? 1.45 : 1
-    goat.cooldown = world.recharge * snow
-    goat.cooldownMax = goat.cooldown
+    goat.cooldown = 0
+    goat.cooldownMax = 0
   }
   if (!world.reduce) world.shake = Math.max(world.shake, 1.2 + p * 2.4)
   burst(world, goat.x - Math.cos(angle) * 10, goat.y - Math.sin(angle) * 10, '#efe6c9', 8, 90, 'dust')

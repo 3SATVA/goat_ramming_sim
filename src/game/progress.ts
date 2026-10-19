@@ -2,7 +2,7 @@ import { FENCE } from './constants'
 import type { ArenaEvent, BossKind, Difficulty, Hazard, Role, Theme } from './types'
 import { clamp, colorDist } from './util'
 
-export type StatId = 'power' | 'hp' | 'weight' | 'speed' | 'recharge' | 'fire'
+export type StatId = 'power' | 'hp' | 'weight' | 'speed' | 'fire'
 export type FightKind = 'story' | 'quick'
 
 export interface Upgrades {
@@ -10,6 +10,7 @@ export interface Upgrades {
   hp: number
   weight: number
   speed: number
+  /** Older saves may still store this. It is kept on load and is not sold or applied. */
   recharge: number
   fire: number
 }
@@ -33,7 +34,6 @@ export const STATS: StatDef[] = [
   { id: 'hp', name: 'Stamina', blurb: 'A bigger health bar.', max: 8 },
   { id: 'weight', name: 'Weight', blurb: 'Harder to shove, and you shove harder.', max: 8 },
   { id: 'speed', name: 'Launch', blurb: 'Faster rams.', max: 6 },
-  { id: 'recharge', name: 'Recharge', blurb: 'Pull again sooner after a ram.', max: 6 },
   { id: 'fire', name: 'Fire coat', blurb: 'The burning fence hurts less.', max: 6 },
 ]
 
@@ -324,7 +324,7 @@ export function loadoutFrom(upgrades: Upgrades): Loadout {
     mass: 1 + upgrades.weight * 0.16,
     damage: 1 + upgrades.power * 0.14,
     speed: 1 + upgrades.speed * 0.07,
-    recharge: Math.max(0.08, 0.42 - upgrades.recharge * 0.055),
+    recharge: 0,
     fire: Math.max(0.32, 1 - upgrades.fire * 0.11),
   }
 }
@@ -335,7 +335,6 @@ export function statEffect(id: StatId, level: number): string {
   if (id === 'hp') return `${preview.maxHp} max HP`
   if (id === 'weight') return `${Math.round(preview.mass * 100)}% weight`
   if (id === 'speed') return `${Math.round(preview.speed * 100)}% launch speed`
-  if (id === 'recharge') return `${preview.recharge.toFixed(2)}s between rams`
   return `${Math.round(preview.fire * 100)}% fire damage`
 }
 

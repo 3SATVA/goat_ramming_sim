@@ -544,7 +544,7 @@ export class Game {
     this.audio.unlock()
     if (this.world.mode !== 'playing') return
     const player = getPlayer(this.world)
-    if (!player || player.dead || player.cooldown > 0) return
+    if (!player || player.dead) return
     const origin = this.toWorld(event.clientX, event.clientY)
     this.dragId = event.pointerId
     this.dragX = event.clientX
