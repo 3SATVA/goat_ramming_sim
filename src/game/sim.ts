@@ -646,7 +646,7 @@ function castVortex(world: World, goat: Goat, hooks: SimHooks): void {
     r: 120,
     life: 2.8,
     max: 2.8,
-    tick: 0.36,
+    tick: 0.08,
   })
   if (world.zones.length > 6) world.zones.splice(0, world.zones.length - 6)
   goat.squash = 0.4
@@ -671,11 +671,11 @@ function updateZones(world: World, dt: number, hooks: SimHooks): void {
         continue
       }
       if (dist > 8) {
-        const pull = 340 * (1 - dist / zone.r)
+        const pull = 480 * (1 - dist / zone.r)
         goat.vx += (dx / dist) * pull * dt
         goat.vy += (dy / dist) * pull * dt
       }
-      if (pulse && dist < zone.r * 0.48) applyDamage(world, goat, 5, null, hooks, false, 'vortex')
+      if (pulse && dist < zone.r * 0.6) applyDamage(world, goat, 5, null, hooks, false, 'vortex')
     }
     if (pulse) zone.tick = 0.48
   }

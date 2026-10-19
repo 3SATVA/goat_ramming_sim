@@ -866,20 +866,20 @@ function drawSpike(ctx: CanvasRenderingContext2D, hazard: Hazard, time: number):
   ctx.translate(hazard.x, hazard.y)
   ctx.fillStyle = 'rgba(26, 18, 12, 0.38)'
   ctx.beginPath()
-  ctx.ellipse(3, 12, 30, 11, 0, 0, Math.PI * 2)
+  ctx.ellipse(4, 16, 42, 14, 0, 0, Math.PI * 2)
   ctx.fill()
   const warn = 0.22 + Math.sin(time * 4 + hazard.x * 0.01) * 0.06
   ctx.fillStyle = `rgba(255, 54, 42, ${warn})`
   ctx.strokeStyle = 'rgba(255, 70, 48, 0.9)'
   ctx.lineWidth = 2.5
   ctx.beginPath()
-  ctx.ellipse(0, 8, 28, 12, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, 10, 40, 16, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.stroke()
   const blades = [
-    { x: -14, h: 30, w: 9 },
-    { x: 14, h: 28, w: 8 },
-    { x: 0, h: 44, w: 11 },
+    { x: -24, h: 50, w: 13 },
+    { x: 24, h: 46, w: 12 },
+    { x: 0, h: 72, w: 16 },
   ]
   const glint = 0.45 + Math.sin(time * 5 + hazard.y * 0.02) * 0.35
   for (const blade of blades) {

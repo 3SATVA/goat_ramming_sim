@@ -345,11 +345,11 @@ export function roleProfile(role: Exclude<Role, 'player'>, boss: BossKind | null
   speed: number
   damage: number
 } {
-  if (boss === 'yard') return { radius: 58, hp: 150, mass: 1.7, speed: 0.84, damage: 2.2 }
-  if (boss === 'frost') return { radius: 60, hp: 165, mass: 1.65, speed: 0.8, damage: 2.1 }
-  if (boss === 'dune') return { radius: 60, hp: 175, mass: 1.75, speed: 0.82, damage: 2.35 }
+  if (boss === 'yard') return { radius: 58, hp: 150, mass: 1.7, speed: 0.84, damage: 3 }
+  if (boss === 'frost') return { radius: 60, hp: 165, mass: 1.65, speed: 0.8, damage: 2.8 }
+  if (boss === 'dune') return { radius: 60, hp: 175, mass: 1.75, speed: 0.82, damage: 3.1 }
   if (role === 'grunt') return { radius: 32, hp: 48, mass: 0.66, speed: 0.84, damage: 0.58 }
-  if (role === 'boss') return { radius: 58, hp: 150, mass: 1.7, speed: 0.84, damage: 2.1 }
+  if (role === 'boss') return { radius: 58, hp: 150, mass: 1.7, speed: 0.84, damage: 2.8 }
   return { radius: 40, hp: 72, mass: 1, speed: 0.92, damage: 0.82 }
 }
 
@@ -505,7 +505,7 @@ function placeHazards(level: ChapterLevel): Hazard[] {
   for (let i = 0; i < level.spikes; i++) {
     const at = spikes[i % spikes.length] ?? [0.5, 0.5]
     const p = spot(at[0], at[1])
-    hazards.push({ kind: 'spike', x: p.x, y: p.y, r: 34, life: -1 })
+    hazards.push({ kind: 'spike', x: p.x, y: p.y, r: 42, life: -1 })
   }
   for (let i = 0; i < level.dunes; i++) {
     const at = dunes[i % dunes.length] ?? [0.5, 0.5]
