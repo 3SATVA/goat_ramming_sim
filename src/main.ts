@@ -60,6 +60,15 @@ const min3 = must<HTMLButtonElement>('#min3')
 const debugMenu = must<HTMLButtonElement>('#btnDebugMenu')
 const debugOt = must<HTMLButtonElement>('#btnDebugOt')
 
+let hudBottomCache = 0
+function measureHud(): number {
+  if (hud.hidden) return hudBottomCache
+  const rect = hud.getBoundingClientRect()
+  const appTop = app.getBoundingClientRect().top
+  if (rect.height > 0) hudBottomCache = rect.bottom - appTop
+  return hudBottomCache
+}
+
 const game = new Game({
   canvas,
   logo: document.querySelector<HTMLCanvasElement>('#logoGoat'),
@@ -123,14 +132,6 @@ document.addEventListener('contextmenu', (event) => {
 })
 document.addEventListener('dblclick', (event) => event.preventDefault(), { passive: false })
 
-let hudBottomCache = 0
-function measureHud(): number {
-  if (hud.hidden) return hudBottomCache
-  const rect = hud.getBoundingClientRect()
-  const appTop = app.getBoundingClientRect().top
-  if (rect.height > 0) hudBottomCache = rect.bottom - appTop
-  return hudBottomCache
-}
 
 must<HTMLButtonElement>('#btnStory').addEventListener('click', () => {
   tap()

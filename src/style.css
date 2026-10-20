@@ -615,3 +615,13 @@ label {
   #screenPause .stack { grid-template-columns: repeat(3, 1fr); }
   .portrait { height: 110px; }
 }
+
+@media (max-height: 460px) {
+  #screenMenu .eyebrow,
+  #screenMenu .block .fine { display: none; }
+  #screenMenu .lede { font-size: 0.86rem; }
+  #screenMenu .coin-pill { margin-top: 4px; }
+  #screenMenu .block { display: flex; align-items: center; gap: 10px; }
+  #screenMenu .block .label { margin: 0; white-space: nowrap; }
+  #screenMenu .seg { flex: 1; }
+}

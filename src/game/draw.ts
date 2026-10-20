@@ -92,6 +92,7 @@ export function drawOverlay(
   viewW: number,
   viewH: number,
   band: number = HUD_BAND,
+  arenaTop: number = band,
 ): void {
   const compact = viewW < 560 || viewH < 460
   if (world.overtime && (world.mode === 'playing' || world.mode === 'paused')) {
@@ -112,7 +113,7 @@ export function drawOverlay(
     }
   }
 
-  drawOffscreen(ctx, world, cam, viewW, viewH, band)
+  drawOffscreen(ctx, world, cam, viewW, viewH, arenaTop)
 
   for (const floater of world.floaters) {
     const sx = cam.x + floater.x * cam.s

@@ -95,6 +95,7 @@ export class Game {
   private readonly isMuted: () => boolean
   private readonly hudBottom: () => number
   private band = HUD_BAND
+  private arenaTop = HUD_BAND
   private maxDrag = MAX_DRAG_PX
   private readonly onMode: GamePorts['onMode']
   private readonly onHud: GamePorts['onHud']
@@ -514,7 +515,7 @@ export class Game {
     drawWorld(ctx, this.world, this.anim, this.pull)
     ctx.restore()
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
-    drawOverlay(ctx, this.world, this.cam, this.viewW, this.viewH, this.band)
+    drawOverlay(ctx, this.world, this.cam, this.viewW, this.viewH, this.band, this.arenaTop)
     this.paintSides()
   }
 
@@ -589,7 +590,10 @@ export class Game {
     this.band = roomy && fromDom <= HUD_BAND + 8 ? HUD_BAND : fromDom
     // Small screens get a shorter pull so a full-power ram still fits between finger and edge.
     this.maxDrag = Math.round(clamp(Math.min(w, h) * 0.36, 110, MAX_DRAG_PX))
-    const top = hud ? this.band : 0
+    // On phones the boss bar sits under the HUD, so keep the arena edge clear of it too.
+    const bossBar = !roomy && this.world.goats.some((g) => g.role === 'boss') ? (w < 560 || h < 460 ? 38 : 44) : 0
+    const top = hud ? this.band + bossBar : 0
+    this.arenaTop = this.band + bossBar
     const worldW = this.world.width
     const worldH = this.world.height
     const availW = w
