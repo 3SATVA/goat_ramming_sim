@@ -34,6 +34,8 @@ export interface GamePorts {
   preview: HTMLCanvasElement | null
   audio: AudioBus
   isMuted: () => boolean
+  /** Bottom edge of the DOM HUD in CSS px (includes the notch inset). 0 when unknown. */
+  hudBottom?: () => number
   onMode: (mode: Mode, end: EndResult | null) => void
   onHud: (hud: HudModel) => void
   onProgress: (progress: Progress) => void
@@ -91,6 +93,9 @@ export class Game {
   private readonly logo: HTMLCanvasElement | null
   private readonly preview: HTMLCanvasElement | null
   private readonly isMuted: () => boolean
+  private readonly hudBottom: () => number
+  private band = HUD_BAND
+  private maxDrag = MAX_DRAG_PX
   private readonly onMode: GamePorts['onMode']
   private readonly onHud: GamePorts['onHud']
   private readonly onProgress: GamePorts['onProgress']
@@ -123,6 +128,7 @@ export class Game {
     this.logo = ports.logo
     this.preview = ports.preview
     this.isMuted = ports.isMuted
+    this.hudBottom = ports.hudBottom ?? (() => 0)
     this.onMode = ports.onMode
     this.onHud = ports.onHud
     this.onProgress = ports.onProgress
@@ -171,6 +177,8 @@ export class Game {
     })
     const observer = new ResizeObserver(() => this.resize())
     observer.observe(this.canvas)
+    window.addEventListener('orientationchange', this.resize)
+    window.visualViewport?.addEventListener('resize', this.resize)
     this.resize()
     requestAnimationFrame(this.frame)
   }
@@ -506,7 +514,7 @@ export class Game {
     drawWorld(ctx, this.world, this.anim, this.pull)
     ctx.restore()
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
-    drawOverlay(ctx, this.world, this.cam, this.viewW, this.viewH)
+    drawOverlay(ctx, this.world, this.cam, this.viewW, this.viewH, this.band)
     this.paintSides()
   }
 
@@ -573,15 +581,27 @@ export class Game {
       this.canvas.height = ph
     }
     const hud = this.world.mode === 'playing' || this.world.mode === 'countdown' || this.world.mode === 'paused'
-    const top = hud ? HUD_BAND : 0
+    // The HUD can be shorter on phones but taller under a notch, so follow the real DOM edge.
+    const measured = this.hudBottom()
+    const roomy = w >= 720 && h >= 600
+    const fromDom = measured > 0 ? Math.max(48, Math.round(measured + 6)) : HUD_BAND
+    // Desktop keeps its original band unless a notch pushes the HUD down.
+    this.band = roomy && fromDom <= HUD_BAND + 8 ? HUD_BAND : fromDom
+    // Small screens get a shorter pull so a full-power ram still fits between finger and edge.
+    this.maxDrag = Math.round(clamp(Math.min(w, h) * 0.36, 110, MAX_DRAG_PX))
+    const top = hud ? this.band : 0
     const worldW = this.world.width
     const worldH = this.world.height
     const availW = w
     const availH = Math.max(1, h - top)
     const fit = Math.min(availW / worldW, availH / worldH)
-    const followScale = Math.min(availW / 900, availH / 760)
+    const portrait = availH > availW * 1.15
+    // Phones in portrait get a closer camera so goats stay big enough to read.
+    const followScale = portrait ? Math.min(availW / 620, availH / 900) : Math.min(availW / 900, availH / 760)
     const quickLarge = this.world.fight === 'quick' && (worldW > 1000 || worldH > 1000)
-    const scrolling = quickLarge && (worldW * followScale > availW + 24 || worldH * followScale > availH + 24)
+    // If the whole arena would shrink goats below ~17px, follow the player instead (only tiny screens).
+    const tooSmall = fit < 0.4 && followScale > fit * 1.08
+    const scrolling = (quickLarge || tooSmall) && (worldW * followScale > availW + 24 || worldH * followScale > availH + 24)
     const s = Math.max(0.01, scrolling ? followScale : fit)
     const player = getPlayer(this.world)
     const focusX = player ? w / 2 - player.x * s : (availW - worldW * s) / 2
@@ -607,6 +627,11 @@ export class Game {
     if (event.button !== 0) return
     this.audio.unlock()
     if (this.world.mode !== 'playing') return
+    // A second finger should not restart a pull that is already in progress.
+    if (this.dragId !== null && this.dragId !== event.pointerId) {
+      event.preventDefault()
+      return
+    }
     const player = getPlayer(this.world)
     if (!player || player.dead) return
     const origin = this.toWorld(event.clientX, event.clientY)
@@ -634,7 +659,7 @@ export class Game {
     const dx = event.clientX - this.dragX
     const dy = event.clientY - this.dragY
     const dist = Math.hypot(dx, dy)
-    player.chargePower = Math.max(0, Math.min(1, dist / MAX_DRAG_PX))
+    player.chargePower = Math.max(0, Math.min(1, dist / this.maxDrag))
     if (dist > 6) {
       player.chargeAngle = Math.atan2(-dy, -dx)
       player.facing = player.chargeAngle

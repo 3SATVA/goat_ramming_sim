@@ -66,6 +66,7 @@ const game = new Game({
   preview: document.querySelector<HTMLCanvasElement>('#previewGoat'),
   audio,
   isMuted: () => settings.muted,
+  hudBottom: () => measureHud(),
   onMode: showMode,
   onHud: showHud,
   onProgress: (progress) => {
@@ -92,6 +93,44 @@ if (game.debugEnabled) {
 }
 
 document.addEventListener('pointerdown', () => audio.unlock(), { passive: true })
+
+// Touch guards: keep the page still while you play. Menus still scroll (see .screen in CSS).
+const isFighting = () => {
+  const mode = app.dataset.mode
+  return mode === 'playing' || mode === 'countdown'
+}
+const insideScroller = (target: EventTarget | null) =>
+  target instanceof Element && target.closest('.screen:not([hidden])') !== null
+document.addEventListener(
+  'touchmove',
+  (event) => {
+    if (event.touches.length > 1 || isFighting() || !insideScroller(event.target)) event.preventDefault()
+  },
+  { passive: false },
+)
+document.addEventListener(
+  'touchstart',
+  (event) => {
+    if (event.touches.length > 1 && !insideScroller(event.target)) event.preventDefault()
+  },
+  { passive: false },
+)
+for (const name of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(name, (event) => event.preventDefault(), { passive: false })
+}
+document.addEventListener('contextmenu', (event) => {
+  if (!(event.target instanceof HTMLInputElement)) event.preventDefault()
+})
+document.addEventListener('dblclick', (event) => event.preventDefault(), { passive: false })
+
+let hudBottomCache = 0
+function measureHud(): number {
+  if (hud.hidden) return hudBottomCache
+  const rect = hud.getBoundingClientRect()
+  const appTop = app.getBoundingClientRect().top
+  if (rect.height > 0) hudBottomCache = rect.bottom - appTop
+  return hudBottomCache
+}
 
 must<HTMLButtonElement>('#btnStory').addEventListener('click', () => {
   tap()
@@ -318,7 +357,13 @@ function syncSwatches(): void {
 
 function syncMuteLabels(): void {
   const label = settings.muted ? 'Sound off' : 'Sound on'
-  btnMute.textContent = label
+  const ico = btnMute.querySelector('.ico')
+  const txt = btnMute.querySelector('.txt')
+  if (ico && txt) {
+    ico.textContent = settings.muted ? '🔇' : '🔊'
+    txt.textContent = label
+  } else btnMute.textContent = label
+  btnMute.setAttribute('aria-label', label)
   btnMuteMenu.textContent = label
   btnMute.setAttribute('aria-pressed', String(!settings.muted))
   btnMuteMenu.setAttribute('aria-pressed', String(!settings.muted))

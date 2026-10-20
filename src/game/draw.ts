@@ -91,7 +91,9 @@ export function drawOverlay(
   cam: Camera,
   viewW: number,
   viewH: number,
+  band: number = HUD_BAND,
 ): void {
+  const compact = viewW < 560 || viewH < 460
   if (world.overtime && (world.mode === 'playing' || world.mode === 'paused')) {
     const g = ctx.createRadialGradient(viewW / 2, viewH / 2, viewW * 0.25, viewW / 2, viewH / 2, viewW * 0.72)
     g.addColorStop(0, 'rgba(255, 70, 0, 0)')
@@ -110,7 +112,7 @@ export function drawOverlay(
     }
   }
 
-  drawOffscreen(ctx, world, cam, viewW, viewH)
+  drawOffscreen(ctx, world, cam, viewW, viewH, band)
 
   for (const floater of world.floaters) {
     const sx = cam.x + floater.x * cam.s
@@ -141,7 +143,7 @@ export function drawOverlay(
     ctx.save()
     ctx.translate(viewW / 2, viewH / 2)
     ctx.scale(pop, pop)
-    ctx.font = '700 86px Fredoka, "Trebuchet MS", sans-serif'
+    ctx.font = `700 ${compact ? 64 : 86}px Fredoka, "Trebuchet MS", sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.lineWidth = 10
@@ -155,13 +157,13 @@ export function drawOverlay(
   const boss = world.goats.find((g) => g.role === 'boss')
   const fighting = world.mode === 'playing' || world.mode === 'countdown' || world.mode === 'paused'
   if (boss && fighting) {
-    const w = Math.min(460, viewW - 48)
-    const h = 16
+    const w = Math.min(460, viewW - (compact ? 24 : 48))
+    const h = compact ? 12 : 16
     const x = (viewW - w) / 2
-    const y = 78
+    const y = band + (compact ? 18 : 24)
     const pct = Math.max(0, boss.hp / boss.maxHp)
     ctx.fillStyle = 'rgba(20, 16, 12, 0.82)'
-    roundRect(ctx, x - 4, y - 22, w + 8, h + 28, 10)
+    roundRect(ctx, x - 4, y - (compact ? 19 : 22), w + 8, h + (compact ? 24 : 28), 10)
     ctx.fill()
     ctx.font = '700 14px Fredoka, "Trebuchet MS", sans-serif'
     ctx.textAlign = 'left'
@@ -183,13 +185,13 @@ export function drawOverlay(
     const copy = eventCopy(world.event)
     ctx.save()
     ctx.globalAlpha = Math.max(0, Math.min(1, world.eventBanner))
-    ctx.font = '700 28px Fredoka, "Trebuchet MS", sans-serif'
+    ctx.font = `700 ${compact ? 22 : 28}px Fredoka, "Trebuchet MS", sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.lineWidth = 6
+    ctx.lineWidth = compact ? 5 : 6
     ctx.strokeStyle = '#2a2118'
     ctx.fillStyle = world.event === 'snowstorm' ? '#e7f6ff' : world.event === 'sandstorm' ? '#ffcf70' : '#fff6e8'
-    const y = boss ? 132 : 86
+    const y = boss ? band + (compact ? 44 : 56) : band + 10
     ctx.strokeText(copy.title, viewW / 2, y)
     ctx.fillText(copy.title, viewW / 2, y)
     ctx.restore()
@@ -201,7 +203,7 @@ export function drawOverlay(
     ctx.textAlign = 'center'
     ctx.textBaseline = 'bottom'
     const text = 'Pull anywhere to ram'
-    const y = viewH - 18
+    const y = viewH - (compact ? 12 : 18)
     ctx.lineWidth = 5
     ctx.strokeStyle = 'rgba(20, 40, 16, 0.8)'
     ctx.strokeText(text, viewW / 2, y)
@@ -643,10 +645,10 @@ function drawPullTether(
   ctx.restore()
 }
 
-function drawOffscreen(ctx: CanvasRenderingContext2D, world: World, cam: Camera, viewW: number, viewH: number): void {
+function drawOffscreen(ctx: CanvasRenderingContext2D, world: World, cam: Camera, viewW: number, viewH: number, band: number): void {
   if (world.mode !== 'playing' && world.mode !== 'countdown' && world.mode !== 'paused') return
-  const margin = 26
-  const top = HUD_BAND + 8
+  const margin = viewW < 560 ? 18 : 26
+  const top = band + 8
   for (const goat of world.goats) {
     if (goat.team !== 'enemy' || goat.dead) continue
     const sx = cam.x + goat.x * cam.s
