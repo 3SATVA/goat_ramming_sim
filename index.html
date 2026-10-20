@@ -2,11 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#14341f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Billy Bash" />
+    <meta name="format-detection" content="telephone=no" />
     <meta name="description" content="Billy Bash — a top-down goat ram arena. Pull back, let go, and knock the other goats out of the round." />
     <title>Billy Bash</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Nunito:wght@600;800&display=swap" rel="stylesheet" />
@@ -23,8 +30,8 @@
         </div>
         <div class="hud-card timer" id="timerLabel">3:00</div>
         <div class="hud-actions">
-          <button id="btnMute" type="button">Sound on</button>
-          <button id="btnPause" type="button">Pause</button>
+          <button id="btnMute" type="button" aria-label="Sound on"><span class="ico" aria-hidden="true">🔊</span><span class="txt">Sound on</span></button>
+          <button id="btnPause" type="button" aria-label="Pause"><span class="ico" aria-hidden="true">❚❚</span><span class="txt">Pause</span></button>
         </div>
       </div>
 
@@ -37,6 +44,7 @@
             <p class="eyebrow">Top-down ram arena</p>
             <h1 id="title">Billy Bash</h1>
             <p class="lede">Pull back, let go, and ram the other goats. Only the goat you hit takes the damage.</p>
+            <p class="rotate-tip">Tip: turn your phone sideways for a wider yard.</p>
             <p class="coin-pill" id="menuCoins">0 coins</p>
             <div class="block">
               <span class="label">Quick fight length</span>
@@ -108,7 +116,7 @@
           <div class="panel">
             <p class="eyebrow">Hold up</p>
             <h2>Paused</h2>
-            <p class="lede">Pull from anywhere and release to ram. Escape or P pauses too.</p>
+            <p class="lede">Pull from anywhere and release to ram. <span class="desk-only">Escape or P pauses too.</span><span class="touch-only">Drag a finger anywhere on the field, then lift to ram.</span></p>
             <div class="stack">
               <button id="btnResume" class="btn" type="button">Resume</button>
               <button id="btnRetryPause" class="btn secondary" type="button">Retry round</button>

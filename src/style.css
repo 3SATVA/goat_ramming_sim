@@ -456,3 +456,172 @@ input[type="color"] {
   h1 { font-size: 2.3rem; }
   .logo-goat { display: none; }
 }
+
+/* ---------- Mobile and touch support ---------- */
+
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+
+html,
+body {
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#app {
+  /* Old browsers use 100%, phones use the dynamic viewport so the URL bar never hides the HUD. */
+  height: 100%;
+  height: 100dvh;
+}
+
+#app {
+  touch-action: none;
+}
+
+button,
+input,
+label {
+  touch-action: manipulation;
+}
+
+#hud {
+  top: calc(10px + var(--sat));
+  left: calc(12px + var(--sal));
+  right: calc(12px + var(--sar));
+}
+
+#hud .ico { display: none; }
+#roundLabel {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hud-card:first-child { min-width: 0; flex: 0 1 auto; }
+
+#btnDebugOt { bottom: calc(16px + var(--sab)); }
+#app:not([data-mode="playing"]):not([data-mode="countdown"]) #btnDebugOt { display: none !important; }
+
+/* Screens scroll on their own; centre the panel when it fits, top-align when it does not. */
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(16px + var(--sat)) calc(16px + var(--sar)) calc(16px + var(--sab)) calc(16px + var(--sal));
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.screen > .panel {
+  margin: auto 0;
+  flex: 0 0 auto;
+}
+
+.panel.tall {
+  max-height: none;
+  overflow: visible;
+}
+
+/* Back stays reachable at the bottom while long lists scroll. */
+.panel.tall > .stack:last-child {
+  position: sticky;
+  bottom: calc(-16px - var(--sab));
+  margin: 14px -18px -16px;
+  padding: 10px 18px calc(14px + var(--sab));
+  background: linear-gradient(to bottom, rgba(255, 246, 232, 0), #fff6e8 14px);
+  border-radius: 0 0 21px 21px;
+  z-index: 1;
+}
+
+.level-btn,
+.upgrade-row { min-height: 52px; }
+
+.swatch {
+  width: 44px;
+  height: 44px;
+}
+
+.picker-row { min-height: 44px; cursor: pointer; }
+
+.rotate-tip,
+.touch-only { display: none; }
+
+@media (hover: none), (pointer: coarse) {
+  .desk-only { display: none; }
+  .touch-only { display: inline; }
+  #view { cursor: default; }
+}
+
+@media (orientation: portrait) and (pointer: coarse) and (max-width: 600px) {
+  .rotate-tip {
+    display: block;
+    margin: 8px 0 0;
+    text-align: center;
+    font-size: 0.86rem;
+    color: #2f7d3b;
+  }
+}
+
+/* Phones: compact HUD with icon buttons. */
+@media (max-width: 600px), (max-height: 460px) {
+  #hud { gap: 6px; top: calc(8px + var(--sat)); left: calc(8px + var(--sal)); right: calc(8px + var(--sar)); }
+  .hud-card { padding: 4px 8px 5px; border-radius: 12px; }
+  .hud-card,
+  .hud-actions button { box-shadow: 2px 2px 0 #1a140f; border-width: 2px; }
+  #roundLabel { font-size: 0.8rem; max-width: 40vw; }
+  .hp-track { width: 100%; min-width: 72px; max-width: 40vw; height: 7px; }
+  #hpLabel { display: none; }
+  .hud-card.timer { min-width: 72px; font-size: 1.2rem; padding-inline: 8px; }
+  .hud-actions { gap: 6px; }
+  .hud-actions button { min-width: 44px; min-height: 44px; padding: 0 10px; border-radius: 12px; }
+  #hud .ico { display: inline; font-size: 1.05rem; line-height: 1; }
+  #hud .txt { display: none; }
+  .btn { min-height: 48px; font-size: 1rem; }
+  .stack { gap: 7px; }
+  h2 { font-size: 1.7rem; }
+}
+
+@media (max-width: 380px) {
+  .panel { padding: 12px; }
+  .panel.tall > .stack:last-child { margin-inline: -12px; padding-inline: 12px; }
+  .hud-card.timer { min-width: 64px; font-size: 1.1rem; }
+}
+
+/* Short landscape phones: trim decoration so menus fit, two-column main buttons. */
+@media (max-height: 460px) {
+  .screen { padding-top: calc(10px + var(--sat)); padding-bottom: calc(10px + var(--sab)); }
+  .panel { width: min(560px, 100%); padding: 12px 14px; }
+  .panel.tall { width: min(620px, 100%); }
+  .panel.tall > .stack:last-child { margin-inline: -14px; padding-inline: 14px; }
+  h1 { font-size: 2rem; }
+  .lede { margin-top: 4px; font-size: 0.9rem; }
+  .fine { font-size: 0.8rem; margin-top: 4px; }
+  .block,
+  .stack { margin-top: 10px; }
+  #screenMenu .stack { grid-template-columns: 1fr 1fr; }
+  #screenMenu .stack .btn { min-height: 46px; }
+  .level-list { grid-template-columns: 1fr 1fr; }
+  .level-list .chapter-label { grid-column: 1 / -1; }
+  .stats { grid-template-columns: 1fr 1fr; column-gap: 16px; }
+  #screenEnd .stack,
+  #screenPause .stack { grid-template-columns: repeat(3, 1fr); }
+  .portrait { height: 110px; }
+}
+
+@media (max-height: 460px) {
+  #screenMenu .eyebrow,
+  #screenMenu .block .fine { display: none; }
+  #screenMenu .lede { font-size: 0.86rem; }
+  #screenMenu .coin-pill { margin-top: 4px; }
+  #screenMenu .block { display: flex; align-items: center; gap: 10px; }
+  #screenMenu .block .label { margin: 0; white-space: nowrap; }
+  #screenMenu .seg { flex: 1; }
+}
