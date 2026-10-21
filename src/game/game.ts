@@ -6,6 +6,7 @@ import {
   allLevels,
   buildQuick,
   buildStory,
+  defaultProgress,
   isUnlocked,
   loadoutFrom,
   STATS,
@@ -102,8 +103,9 @@ export class Game {
   private readonly onProgress: GamePorts['onProgress']
   private readonly hooks: SimHooks
   private readonly world: World
-  private progress: Progress = { coins: 0, upgrades: { power: 0, hp: 0, weight: 0, speed: 0, recharge: 0, fire: 0 }, cleared: 0 }
-  private lastPlan: FightPlan | null = null
+  private progress: Progress = defaultProgress()
+  /** Theme of the fight you just played. Quick fights pick a different one. */
+  private lastTheme: Theme | null = null
   private cam: Camera = { x: 0, y: 0, s: 1 }
   private dpr = 1
   private viewW = 1
@@ -261,7 +263,7 @@ export class Game {
 
   startQuick(): void {
     if (this.world.mode !== 'menu' && this.world.mode !== 'end') return
-    this.arm(buildQuick(this.progress, this.world.color, this.preferredMinutes))
+    this.arm(this.rollQuick())
   }
 
   pause(): void {
@@ -280,15 +282,14 @@ export class Game {
     if (this.world.mode !== 'paused' && this.world.mode !== 'end') return
     this.cancelDrag()
     if (this.world.fight === 'story') this.arm(buildStory(this.world.round, this.progress))
-    else if (this.lastPlan) this.arm(this.lastPlan)
-    else this.arm(buildQuick(this.progress, this.world.color, this.preferredMinutes))
+    else this.arm(this.rollQuick())
   }
 
   nextRound(): void {
     if (this.world.result?.result !== 'win') return
     this.cancelDrag()
     if (this.world.fight === 'quick') {
-      this.arm(buildQuick(this.progress, this.world.color, this.preferredMinutes))
+      this.arm(this.rollQuick())
       return
     }
     const next = allLevels()[this.world.round]
@@ -454,9 +455,13 @@ export class Game {
     }
   }
 
+  private rollQuick(): FightPlan {
+    return buildQuick(this.progress, this.world.color, this.preferredMinutes, Math.random, this.lastTheme)
+  }
+
   private arm(plan: FightPlan): void {
     this.cancelDrag()
-    this.lastPlan = plan
+    this.lastTheme = plan.theme
     this.applyLoadout()
     applyPlan(this.world, plan)
     setupMatch(this.world)
@@ -541,7 +546,7 @@ export class Game {
     const player = getPlayer(this.world)
     const rivals = this.world.lineup.length || this.world.goats.filter((g) => g.team === 'enemy').length
     const title = this.world.fight === 'quick' && (this.world.mode === 'playing' || this.world.mode === 'countdown' || this.world.mode === 'paused' || this.world.mode === 'end')
-      ? `Quick · ${rivals === 1 ? '1 goat' : `${rivals} goats`}`
+      ? `Quick · ${this.world.chapterName} · ${rivals === 1 ? '1 goat' : `${rivals} goats`}`
       : this.world.mode === 'menu' || this.world.mode === 'customize' || this.world.mode === 'story' || this.world.mode === 'upgrades'
         ? 'Billy Bash'
         : `${this.world.round}. ${this.world.levelName}`

@@ -21,6 +21,8 @@ export interface Progress {
   upgrades: Upgrades
   /** Highest story level cleared. Level 1 is always open. */
   cleared: number
+  /** Save format, see PROGRESS_VERSION. */
+  version: number
 }
 
 export interface StatDef {
@@ -62,8 +64,12 @@ export interface ChapterLevel {
   minutes: 2 | 3
   event: ArenaEvent
   slots: { role: Exclude<Role, 'player'>; name: string; color: string; boss?: BossKind }[]
-  /** Playfield width and height. Later levels use a bigger pen. */
+  /** Playfield width. Later levels use a bigger pen. */
   size: number
+  /** Playfield height when it differs from the width. */
+  height?: number
+  /** Pen shape. Square unless set. */
+  shape?: ArenaShape
   rocks: number
   spikes: number
   dunes: number
@@ -111,6 +117,11 @@ export interface FightPlan {
   coins: number
 }
 
+/** AI pacing for one level: windup, cooldown, lead, and launch speed. */
+function pace(windup: number, cooldown: number, lead: number, speed: number) {
+  return { windup, cooldown, lead, speed }
+}
+
 export const CHAPTERS: ChapterDef[] = [
   {
     id: 1,
@@ -128,10 +139,7 @@ export const CHAPTERS: ChapterDef[] = [
         spikes: 0,
         dunes: 0,
         slots: [{ role: 'grunt', name: 'Kiddo', color: '#c8962e' }],
-        windup: 0.9,
-        cooldown: 2.7,
-        lead: 0.24,
-        speed: 0.82,
+        ...pace(0.9, 2.7, 0.24, 0.82),
       },
       {
         name: 'Rock Garden',
@@ -146,10 +154,117 @@ export const CHAPTERS: ChapterDef[] = [
           { role: 'grunt', name: 'Pip', color: '#8d6a4a' },
           { role: 'grunt', name: 'Nib', color: '#6d8f4e' },
         ],
-        windup: 0.78,
-        cooldown: 2.5,
-        lead: 0.28,
-        speed: 0.84,
+        ...pace(0.78, 2.5, 0.28, 0.84),
+      },
+      {
+        name: 'Mud Wrestle',
+        blurb: 'Your first real rival, in mud that kills a ram fast.',
+        minutes: 2,
+        event: 'mud',
+        size: 880,
+        rocks: 1,
+        spikes: 0,
+        dunes: 0,
+        slots: [{ role: 'rival', name: 'Buck', color: '#7a4b93' }],
+        ...pace(0.8, 2.48, 0.28, 0.84),
+      },
+      {
+        name: 'Prickle Patch',
+        blurb: 'The first spike clusters. Shove the kids onto them.',
+        minutes: 2,
+        event: 'clear',
+        size: 920,
+        rocks: 1,
+        spikes: 2,
+        dunes: 0,
+        slots: [
+          { role: 'grunt', name: 'Burr', color: '#a33b3b' },
+          { role: 'grunt', name: 'Thistle', color: '#2c7468' },
+        ],
+        ...pace(0.78, 2.44, 0.29, 0.84),
+      },
+      {
+        name: 'Foggy Pasture',
+        blurb: 'A round pen, thick fog, and three kids you cannot see coming.',
+        minutes: 3,
+        event: 'fog',
+        size: 1000,
+        shape: 'circle',
+        rocks: 2,
+        spikes: 1,
+        dunes: 0,
+        slots: [
+          { role: 'grunt', name: 'Misty', color: '#8d6a4a' },
+          { role: 'grunt', name: 'Murk', color: '#3c5d8a' },
+          { role: 'grunt', name: 'Haze', color: '#c8962e' },
+        ],
+        ...pace(0.77, 2.4, 0.3, 0.85),
+      },
+      {
+        name: 'Gusty Gate',
+        blurb: 'A long pen with the wind at your back. Or not.',
+        minutes: 3,
+        event: 'wind',
+        size: 1160,
+        height: 840,
+        shape: 'rectangle',
+        rocks: 3,
+        spikes: 2,
+        dunes: 0,
+        slots: [
+          { role: 'rival', name: 'Ramsey', color: '#d0693c' },
+          { role: 'grunt', name: 'Puff', color: '#6d8f4e' },
+        ],
+        ...pace(0.76, 2.36, 0.3, 0.85),
+      },
+      {
+        name: 'Puddle Jump',
+        blurb: 'Two rivals on slick, rain-soaked grass.',
+        minutes: 3,
+        event: 'rain',
+        size: 980,
+        rocks: 2,
+        spikes: 2,
+        dunes: 0,
+        slots: [
+          { role: 'rival', name: 'Splash', color: '#3c5d8a' },
+          { role: 'rival', name: 'Drizzle', color: '#2c7468' },
+        ],
+        ...pace(0.75, 2.32, 0.31, 0.85),
+      },
+      {
+        name: 'Barnyard Brawl',
+        blurb: 'Four kids at once in a round pen. Keep moving.',
+        minutes: 3,
+        event: 'clear',
+        size: 1060,
+        shape: 'circle',
+        rocks: 2,
+        spikes: 3,
+        dunes: 0,
+        slots: [
+          { role: 'grunt', name: 'Hay', color: '#c8962e' },
+          { role: 'grunt', name: 'Oats', color: '#8d6a4a' },
+          { role: 'grunt', name: 'Clover', color: '#6d8f4e' },
+          { role: 'grunt', name: 'Barley', color: '#a33b3b' },
+        ],
+        ...pace(0.76, 2.3, 0.31, 0.86),
+      },
+      {
+        name: 'The Gauntlet',
+        blurb: "Gnasher's crew: a rival, two kids, rocks, and spikes in the mud.",
+        minutes: 3,
+        event: 'mud',
+        size: 1060,
+        rocks: 4,
+        spikes: 3,
+        dunes: 0,
+        slots: [
+          { role: 'rival', name: 'Brute', color: '#6b4428' },
+          { role: 'grunt', name: 'Snag', color: '#7a4b93' },
+          { role: 'grunt', name: 'Grit', color: '#3c5d8a' },
+        ],
+        ...pace(0.74, 2.26, 0.32, 0.86),
       },
       {
         name: 'Gnasher',
@@ -161,10 +276,7 @@ export const CHAPTERS: ChapterDef[] = [
         spikes: 2,
         dunes: 0,
         slots: [{ role: 'boss', name: 'Gnasher', color: '#6b4428', boss: 'yard' }],
-        windup: 0.95,
-        cooldown: 2.15,
-        lead: 0.32,
-        speed: 0.86,
+        ...pace(0.95, 2.15, 0.32, 0.86),
       },
     ],
   },
@@ -184,10 +296,7 @@ export const CHAPTERS: ChapterDef[] = [
         spikes: 0,
         dunes: 0,
         slots: [{ role: 'rival', name: 'Nanny', color: '#d7e4ef' }],
-        windup: 0.8,
-        cooldown: 2.4,
-        lead: 0.28,
-        speed: 0.86,
+        ...pace(0.8, 2.4, 0.28, 0.86),
       },
       {
         name: 'Whiteout',
@@ -202,10 +311,124 @@ export const CHAPTERS: ChapterDef[] = [
           { role: 'grunt', name: 'Flake', color: '#c5d8ea' },
           { role: 'grunt', name: 'Slush', color: '#9bb4c9' },
         ],
-        windup: 0.72,
-        cooldown: 2.35,
-        lead: 0.3,
-        speed: 0.88,
+        ...pace(0.72, 2.35, 0.3, 0.88),
+      },
+      {
+        name: 'Black Ice',
+        blurb: 'A round rink. One shove and you skate into the rail.',
+        minutes: 2,
+        event: 'clear',
+        size: 1080,
+        shape: 'circle',
+        rocks: 3,
+        spikes: 1,
+        dunes: 0,
+        slots: [
+          { role: 'rival', name: 'Sleet', color: '#7fa3bf' },
+          { role: 'grunt', name: 'Chip', color: '#e7f3fb' },
+        ],
+        ...pace(0.74, 2.32, 0.3, 0.87),
+      },
+      {
+        name: 'Frozen Fog',
+        blurb: 'Three kids hide in the freezing fog.',
+        minutes: 3,
+        event: 'fog',
+        size: 1100,
+        rocks: 2,
+        spikes: 2,
+        dunes: 0,
+        slots: [
+          { role: 'grunt', name: 'Rime', color: '#c5d8ea' },
+          { role: 'grunt', name: 'Frost', color: '#9bb4c9' },
+          { role: 'grunt', name: 'Glaze', color: '#3c5d8a' },
+        ],
+        ...pace(0.73, 2.3, 0.31, 0.87),
+      },
+      {
+        name: 'Icicle Alley',
+        blurb: 'A long, narrow rink lined with spike clusters.',
+        minutes: 3,
+        event: 'clear',
+        size: 1440,
+        height: 900,
+        shape: 'rectangle',
+        rocks: 2,
+        spikes: 4,
+        dunes: 0,
+        slots: [
+          { role: 'rival', name: 'Shard', color: '#d7e4ef' },
+          { role: 'grunt', name: 'Spike', color: '#7a4b93' },
+        ],
+        ...pace(0.72, 2.28, 0.31, 0.88),
+      },
+      {
+        name: 'Polar Gust',
+        blurb: 'A steady polar wind and two rivals who ride it.',
+        minutes: 3,
+        event: 'wind',
+        size: 1140,
+        rocks: 3,
+        spikes: 2,
+        dunes: 0,
+        slots: [
+          { role: 'rival', name: 'Boreas', color: '#9bb4c9' },
+          { role: 'rival', name: 'Tundra', color: '#e7f3fb' },
+        ],
+        ...pace(0.71, 2.25, 0.32, 0.88),
+      },
+      {
+        name: 'Rink Rumble',
+        blurb: 'Four kids on a wide oval rink.',
+        minutes: 3,
+        event: 'clear',
+        size: 1540,
+        height: 1020,
+        shape: 'oval',
+        rocks: 2,
+        spikes: 3,
+        dunes: 0,
+        slots: [
+          { role: 'grunt', name: 'Puck', color: '#3c5d8a' },
+          { role: 'grunt', name: 'Skate', color: '#c5d8ea' },
+          { role: 'grunt', name: 'Blade', color: '#a33b3b' },
+          { role: 'grunt', name: 'Zamboni', color: '#9bb4c9' },
+        ],
+        ...pace(0.72, 2.24, 0.32, 0.88),
+      },
+      {
+        name: 'Avalanche',
+        blurb: 'A rival and three kids come down with the snowstorm.',
+        minutes: 3,
+        event: 'snowstorm',
+        size: 1200,
+        shape: 'circle',
+        rocks: 3,
+        spikes: 3,
+        dunes: 0,
+        slots: [
+          { role: 'rival', name: 'Slide', color: '#d7e4ef' },
+          { role: 'grunt', name: 'Drift', color: '#7fa3bf' },
+          { role: 'grunt', name: 'Pack', color: '#c5d8ea' },
+          { role: 'grunt', name: 'Crust', color: '#8d6a4a' },
+        ],
+        ...pace(0.7, 2.2, 0.33, 0.89),
+      },
+      {
+        name: 'Blizzard Gate',
+        blurb: "Frostbite's guard: two rivals and a kid in a full blizzard.",
+        minutes: 3,
+        event: 'snowstorm',
+        size: 1220,
+        rocks: 4,
+        spikes: 4,
+        dunes: 0,
+        slots: [
+          { role: 'rival', name: 'Hail', color: '#e7f3fb' },
+          { role: 'rival', name: 'Gale', color: '#7fa3bf' },
+          { role: 'grunt', name: 'Nip', color: '#3c5d8a' },
+        ],
+        ...pace(0.69, 2.16, 0.33, 0.89),
       },
       {
         name: 'Frostbite',
@@ -217,10 +440,7 @@ export const CHAPTERS: ChapterDef[] = [
         spikes: 3,
         dunes: 0,
         slots: [{ role: 'boss', name: 'Frostbite', color: '#e7f3fb', boss: 'frost' }],
-        windup: 1.05,
-        cooldown: 2.05,
-        lead: 0.34,
-        speed: 0.84,
+        ...pace(1.05, 2.05, 0.34, 0.84),
       },
     ],
   },
@@ -243,10 +463,7 @@ export const CHAPTERS: ChapterDef[] = [
           { role: 'grunt', name: 'Pebble', color: '#c4a15a' },
           { role: 'grunt', name: 'Dusty', color: '#a67c45' },
         ],
-        windup: 0.74,
-        cooldown: 2.3,
-        lead: 0.3,
-        speed: 0.86,
+        ...pace(0.74, 2.3, 0.3, 0.86),
       },
       {
         name: 'Sting',
@@ -262,10 +479,124 @@ export const CHAPTERS: ChapterDef[] = [
           { role: 'grunt', name: 'Barb', color: '#8f9a4a' },
           { role: 'rival', name: 'Bleatrice', color: '#a33b3b' },
         ],
-        windup: 0.68,
-        cooldown: 2.2,
-        lead: 0.32,
-        speed: 0.88,
+        ...pace(0.68, 2.2, 0.32, 0.88),
+      },
+      {
+        name: 'Mirage',
+        blurb: 'Heat haze hides a rival and her kid among the drifts.',
+        minutes: 3,
+        event: 'fog',
+        size: 1280,
+        rocks: 2,
+        spikes: 2,
+        dunes: 2,
+        slots: [
+          { role: 'rival', name: 'Shimmer', color: '#e0c27a' },
+          { role: 'grunt', name: 'Wisp', color: '#a67c45' },
+        ],
+        ...pace(0.69, 2.2, 0.32, 0.88),
+      },
+      {
+        name: 'Cactus Patch',
+        blurb: 'Spike clusters everywhere. Watch where you land.',
+        minutes: 3,
+        event: 'clear',
+        size: 1320,
+        shape: 'circle',
+        rocks: 1,
+        spikes: 5,
+        dunes: 2,
+        slots: [
+          { role: 'grunt', name: 'Saguaro', color: '#8f9a4a' },
+          { role: 'grunt', name: 'Prick', color: '#c4a15a' },
+          { role: 'grunt', name: 'Needle', color: '#6d8f4e' },
+        ],
+        ...pace(0.68, 2.16, 0.33, 0.88),
+      },
+      {
+        name: 'Dust Devil',
+        blurb: 'A huge oval in a hot wind. Two rivals hunt you across it.',
+        minutes: 3,
+        event: 'wind',
+        size: 1760,
+        height: 1140,
+        shape: 'oval',
+        rocks: 2,
+        spikes: 3,
+        dunes: 3,
+        slots: [
+          { role: 'rival', name: 'Twister', color: '#d2b48c' },
+          { role: 'rival', name: 'Whirl', color: '#a33b3b' },
+        ],
+        ...pace(0.67, 2.14, 0.33, 0.89),
+      },
+      {
+        name: 'Scorpion Pit',
+        blurb: 'A sunken pit. Two rivals, spikes, and nowhere to hide.',
+        minutes: 3,
+        event: 'clear',
+        size: 1200,
+        rocks: 3,
+        spikes: 4,
+        dunes: 2,
+        slots: [
+          { role: 'rival', name: 'Stinger', color: '#6b4428' },
+          { role: 'rival', name: 'Pincer', color: '#c4a15a' },
+        ],
+        ...pace(0.66, 2.1, 0.34, 0.89),
+      },
+      {
+        name: 'Dune Sea',
+        blurb: 'Four kids on a sea of sand bigger than the screen.',
+        minutes: 3,
+        event: 'sandstorm',
+        size: 1860,
+        height: 1160,
+        shape: 'rectangle',
+        rocks: 3,
+        spikes: 3,
+        dunes: 4,
+        slots: [
+          { role: 'grunt', name: 'Ripple', color: '#d2b48c' },
+          { role: 'grunt', name: 'Crest', color: '#a67c45' },
+          { role: 'grunt', name: 'Swell', color: '#8f9a4a' },
+          { role: 'grunt', name: 'Trough', color: '#7a4b93' },
+        ],
+        ...pace(0.67, 2.1, 0.34, 0.89),
+      },
+      {
+        name: 'Oasis Raid',
+        blurb: 'Two rivals and a kid guard the last water in the desert.',
+        minutes: 3,
+        event: 'wind',
+        size: 1400,
+        shape: 'circle',
+        rocks: 3,
+        spikes: 4,
+        dunes: 2,
+        slots: [
+          { role: 'rival', name: 'Palm', color: '#2c7468' },
+          { role: 'rival', name: 'Date', color: '#6b4428' },
+          { role: 'grunt', name: 'Sip', color: '#3c5d8a' },
+        ],
+        ...pace(0.65, 2.06, 0.35, 0.9),
+      },
+      {
+        name: 'Sandblast',
+        blurb: "Duneking's honor guard: two rivals and two kids in a full sandstorm.",
+        minutes: 3,
+        event: 'sandstorm',
+        size: 1440,
+        rocks: 4,
+        spikes: 5,
+        dunes: 3,
+        slots: [
+          { role: 'rival', name: 'Grind', color: '#e0c27a' },
+          { role: 'rival', name: 'Scour', color: '#a33b3b' },
+          { role: 'grunt', name: 'Grain', color: '#d2b48c' },
+          { role: 'grunt', name: 'Silt', color: '#8f9a4a' },
+        ],
+        ...pace(0.64, 2.02, 0.35, 0.9),
       },
       {
         name: 'Duneking',
@@ -277,14 +608,29 @@ export const CHAPTERS: ChapterDef[] = [
         spikes: 2,
         dunes: 3,
         slots: [{ role: 'boss', name: 'Duneking', color: '#e0c27a', boss: 'dune' }],
-        windup: 0.86,
-        cooldown: 1.9,
-        lead: 0.34,
-        speed: 0.86,
+        ...pace(0.86, 1.9, 0.34, 0.86),
       },
     ],
   },
 ]
+
+/**
+ * The 9-level story before chapters grew to 10 levels each. Old saves store `cleared` as an index
+ * into this list; loading maps it to the same level by name in the new list.
+ */
+export const LEGACY_LEVELS = ['First Butt', 'Rock Garden', 'Gnasher', 'Thin Ice', 'Whiteout', 'Frostbite', 'Hot Sand', 'Sting', 'Duneking']
+
+/** Save format. Version 1 had no field and used `LEGACY_LEVELS`. */
+export const PROGRESS_VERSION = 2
+
+/** Translate a version-1 `cleared` index to the matching level id in today's story. */
+export function migrateCleared(oldCleared: number): number {
+  if (oldCleared <= 0) return 0
+  const levels = allLevels()
+  const name = LEGACY_LEVELS[Math.min(LEGACY_LEVELS.length, oldCleared) - 1]
+  const match = levels.find((level) => level.name === name)
+  return match ? match.id : Math.min(levels.length, oldCleared)
+}
 
 const QUICK_NAMES = ['Nanny', 'Buck', 'Bleatrice', 'Ramsey', 'Goatzart', 'Kiddo', 'Pip', 'Dot', 'Trot', 'Skip']
 const COATS = ['#d0693c', '#3c5d8a', '#7a4b93', '#a33b3b', '#2c7468', '#c8962e', '#6d8f4e', '#8d6a4a']
@@ -311,7 +657,7 @@ export function defaultUpgrades(): Upgrades {
 }
 
 export function defaultProgress(): Progress {
-  return { coins: 0, upgrades: defaultUpgrades(), cleared: 0 }
+  return { coins: 0, upgrades: defaultUpgrades(), cleared: 0, version: PROGRESS_VERSION }
 }
 
 export function upgradeSum(upgrades: Upgrades): number {
@@ -463,7 +809,7 @@ export function eventCopy(event: ArenaEvent): { title: string; detail: string } 
   if (event === 'rain') return { title: 'Rain', detail: 'The grass is slick. Rams slide farther.' }
   if (event === 'wind') return { title: 'Wind', detail: 'A steady push shoves every goat.' }
   if (event === 'mud') return { title: 'Mud', detail: 'Thick mud. Rams die out fast.' }
-  if (event === 'fog') return { title: 'Fog', detail: 'The far side of the yard fades out.' }
+  if (event === 'fog') return { title: 'Fog', detail: 'The far side of the pen fades out.' }
   if (event === 'snowstorm') return { title: 'Snowstorm', detail: 'Whiteout, shifting gusts, and ice that will not grip.' }
   if (event === 'sandstorm') return { title: 'Sandstorm', detail: 'A hard push, stinging sand, and a weaker pull.' }
   return { title: 'Clear', detail: 'Quiet weather.' }
@@ -492,7 +838,11 @@ export function buildStory(levelId: number, progress: Progress): FightPlan {
       stats: scaleStats(roleProfile(role, boss), role === 'boss' || boss ? 'boss' : 'mob', progressT, rating, answer),
     }
   })
+  if (slots.length > 2) applyStoryPack(slots)
   const bossFight = slots.some((slot) => slot.role === 'boss')
+  const shape = level.shape ?? 'square'
+  const width = level.size
+  const height = level.height ?? level.size
   return {
     fight: 'story',
     round: level.id,
@@ -501,15 +851,26 @@ export function buildStory(levelId: number, progress: Progress): FightPlan {
     minutes: level.minutes,
     event: level.event,
     theme: level.theme,
-    shape: 'square',
-    width: level.size,
-    height: level.size,
-    size: level.size,
-    windAngle: level.theme === 'desert' ? 0.15 : level.theme === 'ice' ? -0.8 : 0.4,
+    shape,
+    width,
+    height,
+    size: Math.max(width, height),
+    windAngle: level.theme === 'desert' ? 0.15 : level.theme === 'ice' ? -0.8 : 0.4 + (level.id % 4) * 0.9,
     slots,
-    hazards: placeHazards(level),
+    hazards: placeHazards(level, shape, width, height),
     diff: storyDiff(level, slots.length, progressT, rating, answer, bossFight),
     coins: storyReward(level, first),
+  }
+}
+
+/** Story crowds are hand-built, so they get a gentler share than quick fights: three or four goats are not three or four full goats. */
+function applyStoryPack(slots: FightSlot[]): void {
+  const share = 2 / slots.length
+  const hp = Math.pow(share, 0.35)
+  const damage = Math.pow(share, 0.6)
+  for (const slot of slots) {
+    slot.stats.hp = Math.max(30, Math.round(slot.stats.hp * hp))
+    slot.stats.damage = round2(slot.stats.damage * damage)
   }
 }
 
@@ -518,6 +879,7 @@ export function buildQuick(
   playerColor: string,
   minutes: 2 | 3 = 3,
   rng: () => number = Math.random,
+  avoid: Theme | null = null,
 ): FightPlan {
   const sum = upgradeSum(progress.upgrades)
   const budget = 1.05 + sum * 0.16
@@ -556,13 +918,7 @@ export function buildQuick(
   const rating = playerRating(progress.upgrades)
   const arena = QUICK_ARENAS[Math.floor(rng() * QUICK_ARENAS.length)] ?? QUICK_ARENAS[0]
   if (!arena) throw new Error('Quick arenas are empty')
-  const grounds: { theme: Theme; event: ArenaEvent; name: string }[] = [
-    { theme: 'yard', event: (['clear', 'rain', 'wind', 'mud', 'fog'] as ArenaEvent[])[Math.floor(rng() * 5)] ?? 'clear', name: 'The Yard' },
-    { theme: 'ice', event: 'snowstorm', name: 'Icebound' },
-    { theme: 'desert', event: 'sandstorm', name: 'The Dunes' },
-  ]
-  const ground = grounds[Math.floor(rng() * grounds.length)] ?? grounds[0]
-  if (!ground) throw new Error('Quick grounds are empty')
+  const ground = pickQuickGround(rng, avoid)
   return {
     fight: 'quick',
     round: 1,
@@ -575,7 +931,7 @@ export function buildQuick(
     width: arena.width,
     height: arena.height,
     size: Math.max(arena.width, arena.height),
-    windAngle: ground.theme === 'desert' ? 0.15 : ground.theme === 'ice' ? -0.8 : rng() * Math.PI * 2,
+    windAngle: rng() * Math.PI * 2,
     slots,
     hazards: quickHazards(arena.shape, arena.width, arena.height, ground.theme, rng),
     diff: curve(
@@ -593,9 +949,37 @@ export function buildQuick(
   }
 }
 
+const QUICK_GROUNDS: { theme: Theme; name: string; events: [ArenaEvent, number][] }[] = [
+  { theme: 'yard', name: 'The Yard', events: [['clear', 1], ['rain', 1], ['wind', 1], ['mud', 1], ['fog', 1]] },
+  { theme: 'ice', name: 'Icebound', events: [['snowstorm', 3], ['clear', 1], ['fog', 1]] },
+  { theme: 'desert', name: 'The Dunes', events: [['sandstorm', 3], ['clear', 1], ['wind', 1]] },
+]
+
+/**
+ * Every quick fight rolls its own ground: theme, matching weather, and the physics that come with it.
+ * `avoid` is the theme of the fight you just left, so a quick fight always takes you somewhere new.
+ */
+export function pickQuickGround(rng: () => number, avoid: Theme | null = null): { theme: Theme; event: ArenaEvent; name: string } {
+  const pool = QUICK_GROUNDS.filter((ground) => ground.theme !== avoid)
+  const ground = pool[Math.floor(rng() * pool.length)] ?? QUICK_GROUNDS[0]
+  if (!ground) throw new Error('Quick grounds are empty')
+  const total = ground.events.reduce((sum, [, weight]) => sum + weight, 0)
+  let roll = rng() * total
+  let event: ArenaEvent = ground.events[0]?.[0] ?? 'clear'
+  for (const [name, weight] of ground.events) {
+    roll -= weight
+    if (roll <= 0) {
+      event = name
+      break
+    }
+  }
+  return { theme: ground.theme, event, name: ground.name }
+}
+
 function storyReward(level: StoryLevel, firstClear: boolean): number {
   const bosses = level.slots.filter((slot) => slot.role === 'boss').length
-  const base = 16 + level.id * 5 + level.slots.length * 4 + bosses * 14
+  // Ten levels per chapter, so the per-level climb is gentler than it was with three.
+  const base = 16 + Math.round(level.id * 1.6) + level.slots.length * 4 + bosses * 20
   return firstClear ? base : Math.max(5, Math.round(base * 0.4))
 }
 
@@ -677,48 +1061,71 @@ function quickHazards(shape: ArenaShape, width: number, height: number, theme: T
   return hazards
 }
 
-function placeHazards(level: ChapterLevel): Hazard[] {
-  const size = level.size
-  const spot = (nx: number, ny: number) => ({
-    x: FENCE + 90 + nx * (size - FENCE * 2 - 180),
-    y: FENCE + 130 + ny * (size - FENCE * 2 - 260),
-  })
-  const rocks = [
-    [0.22, 0.42],
-    [0.74, 0.48],
-    [0.48, 0.62],
-    [0.3, 0.28],
-    [0.68, 0.72],
-  ]
-  const spikes = [
-    [0.18, 0.58],
-    [0.82, 0.36],
-    [0.4, 0.5],
-    [0.62, 0.4],
-    [0.55, 0.7],
-  ]
-  const dunes = [
-    [0.5, 0.46],
-    [0.28, 0.6],
-    [0.72, 0.58],
-  ]
+/**
+ * Fixed, hand-picked spots (0..1 across the inner pen) tried in order, so a level always looks the same.
+ * Spots outside a round pen, on top of another hazard, or on a spawn point are skipped.
+ */
+const ROCK_SPOTS = [
+  [0.22, 0.42], [0.74, 0.48], [0.48, 0.62], [0.3, 0.28], [0.68, 0.72],
+  [0.12, 0.7], [0.88, 0.62], [0.56, 0.3], [0.38, 0.8], [0.84, 0.24],
+]
+const SPIKE_SPOTS = [
+  [0.18, 0.58], [0.82, 0.36], [0.4, 0.5], [0.62, 0.4], [0.55, 0.7],
+  [0.26, 0.36], [0.76, 0.64], [0.12, 0.3], [0.9, 0.78], [0.46, 0.24],
+]
+const DUNE_SPOTS = [
+  [0.5, 0.46], [0.28, 0.6], [0.72, 0.58], [0.2, 0.3], [0.8, 0.3], [0.5, 0.78],
+]
+
+function placeHazards(level: StoryLevel, shape: ArenaShape, width: number, height: number): Hazard[] {
+  const rng = seeded(level.id * 7919 + 17)
+  const round = shape === 'circle' || shape === 'oval'
+  const reach = (height / 2 - FENCE - 40) * 0.66
+  const playerY = round ? height / 2 + reach : height - FENCE - 60
+  const enemyY = round ? height / 2 - reach : FENCE + 76
   const hazards: Hazard[] = []
-  for (let i = 0; i < level.rocks; i++) {
-    const at = rocks[i % rocks.length] ?? [0.5, 0.5]
-    const p = spot(at[0], at[1])
-    hazards.push({ kind: 'rock', x: p.x, y: p.y, r: 34 + (i % 2) * 6, life: -1 })
+  const fits = (x: number, y: number, r: number) => {
+    if (!insideArena(shape, width, height, x, y, FENCE + r + 20)) return false
+    if (Math.hypot(x - width / 2, y - playerY) < r + 110) return false
+    if (Math.abs(y - enemyY) < r + 70) return false
+    return !hazards.some((hazard) => Math.hypot(hazard.x - x, hazard.y - y) < hazard.r + r + 30)
   }
-  for (let i = 0; i < level.spikes; i++) {
-    const at = spikes[i % spikes.length] ?? [0.5, 0.5]
-    const p = spot(at[0], at[1])
-    hazards.push({ kind: 'spike', x: p.x, y: p.y, r: 42, life: -1 })
+  const drop = (kind: Hazard['kind'], count: number, spots: number[][], radius: (i: number) => number) => {
+    let next = 0
+    for (let i = 0; i < count; i++) {
+      const r = radius(i)
+      let placed = false
+      while (!placed && next < spots.length) {
+        const at = spots[next++] ?? [0.5, 0.5]
+        const x = FENCE + 90 + (at[0] ?? 0.5) * (width - FENCE * 2 - 180)
+        const y = FENCE + 130 + (at[1] ?? 0.5) * (height - FENCE * 2 - 260)
+        if (!fits(x, y, r)) continue
+        hazards.push({ kind, x, y, r, life: -1 })
+        placed = true
+      }
+      for (let attempt = 0; !placed && attempt < 60; attempt++) {
+        const x = FENCE + 70 + rng() * (width - FENCE * 2 - 140)
+        const y = FENCE + 90 + rng() * (height - FENCE * 2 - 180)
+        if (!fits(x, y, r)) continue
+        hazards.push({ kind, x, y, r, life: -1 })
+        placed = true
+      }
+    }
   }
-  for (let i = 0; i < level.dunes; i++) {
-    const at = dunes[i % dunes.length] ?? [0.5, 0.5]
-    const p = spot(at[0], at[1])
-    hazards.push({ kind: 'dune', x: p.x, y: p.y, r: 72, life: -1 })
-  }
+  drop('rock', level.rocks, ROCK_SPOTS, (i) => 34 + (i % 2) * 6)
+  drop('spike', level.spikes, SPIKE_SPOTS, () => 42)
+  drop('dune', level.dunes, DUNE_SPOTS, () => 72)
   return hazards
+}
+
+function seeded(seed: number): () => number {
+  let t = seed >>> 0
+  return () => {
+    t = (t + 0x6d2b79f5) >>> 0
+    let r = Math.imul(t ^ (t >>> 15), 1 | t)
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296
+  }
 }
 
 function coatFor(playerColor: string, used: string[], rng: () => number): string {
