@@ -251,7 +251,7 @@ function showHud(model: HudModel): void {
 }
 
 function fillEnd(end: EndResult): void {
-  endRound.textContent = end.fight === 'quick' ? 'Quick Fight' : `${end.chapterName} · ${end.round}. ${end.levelName}`
+  endRound.textContent = end.fight === 'quick' ? `Quick Fight · ${end.chapterName}` : `${end.chapterName} · ${end.round}. ${end.levelName}`
   const copy = endCopy(end)
   endTitle.textContent = copy.title
   endBody.textContent = copy.body

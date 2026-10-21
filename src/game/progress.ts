@@ -463,7 +463,7 @@ export function eventCopy(event: ArenaEvent): { title: string; detail: string } 
   if (event === 'rain') return { title: 'Rain', detail: 'The grass is slick. Rams slide farther.' }
   if (event === 'wind') return { title: 'Wind', detail: 'A steady push shoves every goat.' }
   if (event === 'mud') return { title: 'Mud', detail: 'Thick mud. Rams die out fast.' }
-  if (event === 'fog') return { title: 'Fog', detail: 'The far side of the yard fades out.' }
+  if (event === 'fog') return { title: 'Fog', detail: 'The far side of the pen fades out.' }
   if (event === 'snowstorm') return { title: 'Snowstorm', detail: 'Whiteout, shifting gusts, and ice that will not grip.' }
   if (event === 'sandstorm') return { title: 'Sandstorm', detail: 'A hard push, stinging sand, and a weaker pull.' }
   return { title: 'Clear', detail: 'Quiet weather.' }
@@ -518,6 +518,7 @@ export function buildQuick(
   playerColor: string,
   minutes: 2 | 3 = 3,
   rng: () => number = Math.random,
+  avoid: Theme | null = null,
 ): FightPlan {
   const sum = upgradeSum(progress.upgrades)
   const budget = 1.05 + sum * 0.16
@@ -556,13 +557,7 @@ export function buildQuick(
   const rating = playerRating(progress.upgrades)
   const arena = QUICK_ARENAS[Math.floor(rng() * QUICK_ARENAS.length)] ?? QUICK_ARENAS[0]
   if (!arena) throw new Error('Quick arenas are empty')
-  const grounds: { theme: Theme; event: ArenaEvent; name: string }[] = [
-    { theme: 'yard', event: (['clear', 'rain', 'wind', 'mud', 'fog'] as ArenaEvent[])[Math.floor(rng() * 5)] ?? 'clear', name: 'The Yard' },
-    { theme: 'ice', event: 'snowstorm', name: 'Icebound' },
-    { theme: 'desert', event: 'sandstorm', name: 'The Dunes' },
-  ]
-  const ground = grounds[Math.floor(rng() * grounds.length)] ?? grounds[0]
-  if (!ground) throw new Error('Quick grounds are empty')
+  const ground = pickQuickGround(rng, avoid)
   return {
     fight: 'quick',
     round: 1,
@@ -575,7 +570,7 @@ export function buildQuick(
     width: arena.width,
     height: arena.height,
     size: Math.max(arena.width, arena.height),
-    windAngle: ground.theme === 'desert' ? 0.15 : ground.theme === 'ice' ? -0.8 : rng() * Math.PI * 2,
+    windAngle: rng() * Math.PI * 2,
     slots,
     hazards: quickHazards(arena.shape, arena.width, arena.height, ground.theme, rng),
     diff: curve(
@@ -591,6 +586,33 @@ export function buildQuick(
     ),
     coins: 8 + slots.length * 6 + Math.round(sum * 0.35),
   }
+}
+
+const QUICK_GROUNDS: { theme: Theme; name: string; events: [ArenaEvent, number][] }[] = [
+  { theme: 'yard', name: 'The Yard', events: [['clear', 1], ['rain', 1], ['wind', 1], ['mud', 1], ['fog', 1]] },
+  { theme: 'ice', name: 'Icebound', events: [['snowstorm', 3], ['clear', 1], ['fog', 1]] },
+  { theme: 'desert', name: 'The Dunes', events: [['sandstorm', 3], ['clear', 1], ['wind', 1]] },
+]
+
+/**
+ * Every quick fight rolls its own ground: theme, matching weather, and the physics that come with it.
+ * `avoid` is the theme of the fight you just left, so a quick fight always takes you somewhere new.
+ */
+export function pickQuickGround(rng: () => number, avoid: Theme | null = null): { theme: Theme; event: ArenaEvent; name: string } {
+  const pool = QUICK_GROUNDS.filter((ground) => ground.theme !== avoid)
+  const ground = pool[Math.floor(rng() * pool.length)] ?? QUICK_GROUNDS[0]
+  if (!ground) throw new Error('Quick grounds are empty')
+  const total = ground.events.reduce((sum, [, weight]) => sum + weight, 0)
+  let roll = rng() * total
+  let event: ArenaEvent = ground.events[0]?.[0] ?? 'clear'
+  for (const [name, weight] of ground.events) {
+    roll -= weight
+    if (roll <= 0) {
+      event = name
+      break
+    }
+  }
+  return { theme: ground.theme, event, name: ground.name }
 }
 
 function storyReward(level: StoryLevel, firstClear: boolean): number {
