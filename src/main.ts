@@ -1,7 +1,7 @@
 import { AudioBus } from './game/audio'
 import { Game } from './game/game'
 import type { Snapshot } from './game/game'
-import { CHAPTERS, eventCopy, isUnlocked, STATS, statEffect, upgradeCost, type Progress } from './game/progress'
+import { allLevels, CHAPTERS, eventCopy, isUnlocked, STATS, statEffect, upgradeCost, type Progress } from './game/progress'
 import { loadProgress, loadSettings, saveProgress, saveSettings, type Settings } from './game/storage'
 import type { EndResult, HudModel, Mode } from './game/types'
 import { COAT_COLORS } from './game/types'
@@ -36,6 +36,7 @@ const screenUpgrades = must<HTMLElement>('#screenUpgrades')
 const screenPause = must<HTMLElement>('#screenPause')
 const screenEnd = must<HTMLElement>('#screenEnd')
 const storyList = must<HTMLElement>('#storyList')
+const storyTabs = must<HTMLElement>('#storyTabs')
 const upgradeList = must<HTMLElement>('#upgradeList')
 const menuCoins = must<HTMLElement>('#menuCoins')
 const storyCoins = must<HTMLElement>('#storyCoins')
@@ -377,38 +378,78 @@ function paintEconomy(progress: Progress): void {
   upgradeCoins.textContent = label
 }
 
+/** Chapter shown in level select. Null picks the chapter with your next open level. */
+let storyChapter: number | null = null
+
 function paintStory(progress: Progress): void {
   storyList.replaceChildren()
-  let id = 1
+  const levels = allLevels()
+  const frontier = levels[Math.min(levels.length, progress.cleared + 1) - 1]
+  const firstOf = (chapterId: number) => levels.find((level) => level.chapterId === chapterId)
+  const chapterOpen = (chapterId: number) => isUnlocked(firstOf(chapterId)?.id ?? 1, progress.cleared)
+  if (storyChapter === null || !chapterOpen(storyChapter)) storyChapter = frontier?.chapterId ?? 1
+
+  storyTabs.replaceChildren()
   for (const chapter of CHAPTERS) {
-    const heading = document.createElement('h3')
-    heading.className = 'chapter-label'
-    const name = document.createElement('strong')
-    name.textContent = `Chapter ${chapter.id} · ${chapter.name}`
-    const blurb = document.createElement('span')
-    blurb.textContent = chapter.blurb
-    heading.append(name, blurb)
-    storyList.append(heading)
-    for (const level of chapter.levels) {
-      const levelId = id++
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.className = level.slots.some((slot) => slot.role === 'boss') ? 'level-btn boss' : 'level-btn'
-      const open = isUnlocked(levelId, progress.cleared)
-      button.disabled = !open
-      const title = document.createElement('strong')
-      title.textContent = open ? `${levelId}. ${level.name}` : `${levelId}. Locked`
-      const detail = document.createElement('span')
-      const weather = eventCopy(level.event).title
-      detail.textContent = open ? `${level.blurb} ${level.minutes}:00 · ${weather}.` : 'Clear the previous level.'
-      button.append(title, detail)
-      button.addEventListener('click', () => {
-        if (!open) return
-        tap()
-        game.startStory(levelId)
-      })
-      storyList.append(button)
-    }
+    const inChapter = levels.filter((level) => level.chapterId === chapter.id)
+    const done = inChapter.filter((level) => level.id <= progress.cleared).length
+    const open = chapterOpen(chapter.id)
+    const tab = document.createElement('button')
+    tab.type = 'button'
+    tab.className = 'chapter-tab'
+    tab.setAttribute('role', 'tab')
+    tab.setAttribute('aria-selected', String(chapter.id === storyChapter))
+    tab.disabled = !open
+    tab.dataset.theme = chapter.theme
+    const label = document.createElement('strong')
+    label.textContent = `Ch ${chapter.id} · ${chapter.name}`
+    const count = document.createElement('span')
+    count.textContent = open ? `${done}/${inChapter.length} cleared` : 'Locked'
+    tab.append(label, count)
+    tab.addEventListener('click', () => {
+      if (!open || storyChapter === chapter.id) return
+      tap()
+      storyChapter = chapter.id
+      paintStory(game.currentProgress())
+    })
+    storyTabs.append(tab)
+  }
+
+  const chapter = CHAPTERS.find((entry) => entry.id === storyChapter) ?? CHAPTERS[0]
+  if (!chapter) return
+  const heading = document.createElement('h3')
+  heading.className = 'chapter-label'
+  const name = document.createElement('strong')
+  name.textContent = `Chapter ${chapter.id} · ${chapter.name}`
+  const blurb = document.createElement('span')
+  blurb.textContent = chapter.blurb
+  heading.append(name, blurb)
+  storyList.append(heading)
+  for (const level of levels.filter((entry) => entry.chapterId === chapter.id)) {
+    const levelId = level.id
+    const boss = level.slots.some((slot) => slot.role === 'boss')
+    const button = document.createElement('button')
+    button.type = 'button'
+    const open = isUnlocked(levelId, progress.cleared)
+    const cleared = levelId <= progress.cleared
+    button.className = ['level-btn', boss ? 'boss' : '', cleared ? 'cleared' : '', levelId === frontier?.id && !cleared ? 'next' : '']
+      .filter(Boolean)
+      .join(' ')
+    button.disabled = !open
+    const title = document.createElement('strong')
+    const tag = boss ? ' · Boss' : ''
+    title.textContent = open ? `${levelId}. ${level.name}${tag}${cleared ? ' ✓' : ''}` : `${levelId}. Locked${tag}`
+    const detail = document.createElement('span')
+    const weather = eventCopy(level.event).title
+    const goats = level.slots.length === 1 ? (boss ? 'Boss fight' : '1 goat') : `${level.slots.length} goats`
+    detail.textContent = open ? `${level.blurb} ${goats} · ${level.minutes}:00 · ${weather}.` : 'Clear the previous level.'
+    button.append(title, detail)
+    button.addEventListener('click', () => {
+      if (!open) return
+      tap()
+      game.startStory(levelId)
+    })
+    storyList.append(button)
   }
 }
 

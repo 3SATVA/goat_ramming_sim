@@ -6,6 +6,7 @@ import {
   allLevels,
   buildQuick,
   buildStory,
+  defaultProgress,
   isUnlocked,
   loadoutFrom,
   STATS,
@@ -102,7 +103,7 @@ export class Game {
   private readonly onProgress: GamePorts['onProgress']
   private readonly hooks: SimHooks
   private readonly world: World
-  private progress: Progress = { coins: 0, upgrades: { power: 0, hp: 0, weight: 0, speed: 0, recharge: 0, fire: 0 }, cleared: 0 }
+  private progress: Progress = defaultProgress()
   /** Theme of the fight you just played. Quick fights pick a different one. */
   private lastTheme: Theme | null = null
   private cam: Camera = { x: 0, y: 0, s: 1 }

@@ -1,4 +1,4 @@
-import { defaultProgress, STATS, type Progress, type Upgrades } from './progress'
+import { allLevels, defaultProgress, migrateCleared, PROGRESS_VERSION, STATS, type Progress, type Upgrades } from './progress'
 import { isHexColor } from './util'
 
 export interface Settings {
@@ -52,8 +52,13 @@ export function loadProgress(): Progress {
       if (typeof value === 'number' && Number.isFinite(value)) upgrades[key] = Math.min(max, Math.max(0, Math.floor(value)))
     }
     const coins = typeof parsed.coins === 'number' && Number.isFinite(parsed.coins) ? Math.max(0, Math.floor(parsed.coins)) : 0
-    const cleared = typeof parsed.cleared === 'number' && Number.isFinite(parsed.cleared) ? Math.max(0, Math.floor(parsed.cleared)) : 0
-    return { coins, upgrades, cleared }
+    const stored = typeof parsed.cleared === 'number' && Number.isFinite(parsed.cleared) ? Math.max(0, Math.floor(parsed.cleared)) : 0
+    const version = typeof parsed.version === 'number' && Number.isFinite(parsed.version) ? parsed.version : 1
+    // Version 1 saves came from the 9-level story; keep the same levels cleared in the 30-level one.
+    const cleared = Math.min(allLevels().length, version < 2 ? migrateCleared(stored) : stored)
+    const progress = { coins, upgrades, cleared, version: PROGRESS_VERSION }
+    if (version < PROGRESS_VERSION) saveProgress(progress)
+    return progress
   } catch {
     return fallback
   }
