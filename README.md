@@ -4,7 +4,7 @@ A top-down arena brawler. You are a goat. Pull from anywhere on the field and ra
 
 ## How to play
 
-1. **Story Mode** walks a lineup of levels. They unlock in order. Rivals and bosses grow tougher as the chapters go on, and they answer a heavily upgraded goat so a maxed Billy does not walk through the last pen. **Quick Fight** rolls a fresh arena each time: size, shape (square, rectangle, circle, or oval), and a yard, ice, or desert theme with that chapter's weather. Up to four enemies scale to your upgrades and split their strength across the flock, so four goats are not four copies of you. Quick fights use the round length on the main menu (2:00 or 3:00). Story levels set their own clock.
+1. **Story Mode** walks a lineup of levels. They unlock in order. Rivals and bosses grow tougher as the chapters go on, and they answer a heavily upgraded goat so a maxed Billy does not walk through the last pen. **Quick Fight** rolls a fresh arena each time: size, shape (square, rectangle, circle, or oval), and a yard, ice, or desert theme with matching weather and footing. The theme is never the one from the fight you just left, so Replay and Another fight move you somewhere new too. Up to four enemies scale to your upgrades and split their strength across the flock, so four goats are not four copies of you. Quick fights use the round length on the main menu (2:00 or 3:00). Story levels set their own clock.
 2. **Press and drag anywhere** on the field. You are the goat with the red collar and the dashed ring. Mouse and touch both work. Menu and HUD buttons still click normally.
 3. **The pull sets the ram.** Launch direction is opposite your drag, and a longer drag means more speed and knockback. The aim arrow is drawn from your goat. You can pull again the moment you let go.
 4. **Only the goat being hit takes ram damage.** The rammer does not. The same rule applies when an enemy hits you. If both closing speeds are nearly the same, nobody takes ram damage unless one of you is still in the ram and the other is not. Knockback still happens, and a heavier goat shoves harder.
@@ -17,7 +17,7 @@ Pause with the **Pause** button, **Esc**, or **P**. Leaving the tab also pauses.
 
 ## Story chapters
 
-Chapters are a list in the game data. Each one names its field, its levels, and its hazards, so another chapter can be added by appending to that list.
+Chapters are a list in the game data. Each one names its field, its levels, and its hazards, so another chapter can be added by appending to that list. Each chapter has 10 levels, and its boss is level 10. Story Mode shows one chapter at a time with a tab per chapter. Story pens can be square, rectangle, circle, or oval. Saves from the old 9-level story are migrated on load: every level you had cleared stays cleared, and a beaten boss keeps the next chapter open.
 
 1. **The Yard** is the grassy field and the white fence. Later levels add boulders, then spike clusters. It ends with **Gnasher**, who opens with three rapid charges and finishes with a freight-train ram. Boss rams hit much harder than a rival's, and the last bosses carry far more HP, mass, and aggression than the first kids.
 2. **Icebound** is snow and ice. Rams slide. A snowstorm whites out the pen, shoves everyone with gusts that change direction, and slows how fast rivals recover. It ends with **Frostbite**, who breathes a freezing cone (an ice patch that slows whoever stands on it) and then rides a glacier charge.

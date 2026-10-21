@@ -136,6 +136,7 @@ document.addEventListener('dblclick', (event) => event.preventDefault(), { passi
 
 must<HTMLButtonElement>('#btnStory').addEventListener('click', () => {
   tap()
+  storyChapter = null
   game.openStory()
 })
 must<HTMLButtonElement>('#btnQuick').addEventListener('click', () => {
